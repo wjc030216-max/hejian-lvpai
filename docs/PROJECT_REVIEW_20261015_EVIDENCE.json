@@ -1,0 +1,68 @@
+{
+  "wechat_realistic_envelope": {
+    "http": 200,
+    "ack": {
+      "code": "SUCCESS",
+      "message": "已收到"
+    },
+    "state": "pending_payment",
+    "payment": "unpaid"
+  },
+  "wechat_amount_after_success_branch": 0,
+  "wechat_callback_during_prepay": "paying",
+  "refund": {
+    "http": 200,
+    "state": "refund_pending",
+    "refund_status": "pending"
+  },
+  "ninety_day_old_public_share": {
+    "http": 200,
+    "new_ttl_days": 30
+  },
+  "four_real_users": "视频参考图超过接口上限 9 张",
+  "file_download_without_token": 200,
+  "failed_completion_notification": {
+    "attempts": 1,
+    "due_projects": 0,
+    "sent": false
+  },
+  "package_release_missing_required_file": "DEPLOY_THREE_SERVERS.md",
+  "frontend_reproductions": {
+    "media_token_after_refresh": "access=EXPIRED",
+    "grid_selected_code": "other instead of target9",
+    "filter_race": {
+      "selected_filter": "2",
+      "displayed_template": "one"
+    },
+    "empty_state_clear_handler": "undefined"
+  },
+  "test_results": {
+    "python_version": "3.9.12",
+    "node_version": "22.14.0",
+    "python_syntax_files": 79,
+    "javascript_syntax_files": 20,
+    "backend": {
+      "total": 122,
+      "passed": 96,
+      "failures": 5,
+      "errors": 6,
+      "skipped": 15
+    },
+    "payment_frontend": {
+      "total": 5,
+      "passed": 4,
+      "failed": 1
+    },
+    "frontend_flow": "Stopped: wx.showModal mock missing",
+    "network_policy": "Outbound socket.connect blocked during Python tests and reproductions",
+    "live_services_tested": false
+  },
+  "legacy_repository": {
+    "root": "G:/桂智旅/aitravel",
+    "path_in_HEAD": "server/pay/cert/apiclient_key.pem",
+    "private_key_marker": true,
+    "bytes": 1704,
+    "validity": "not checked",
+    "scope": "outer legacy repository, not current phase2 repository"
+  }
+}

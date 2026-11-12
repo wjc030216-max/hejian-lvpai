@@ -1,0 +1,23 @@
+{
+  "pages": [
+    "pages/phase2/entry/entry",
+    "pages/phase2/upload/upload",
+    "pages/phase2/work/work",
+    "pages/phase2/share/share",
+    "pages/phase2/works/works"
+  ],
+  "window": {
+    "navigationStyle": "custom",
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "贺见旅拍",
+    "navigationBarBackgroundColor": "#101314",
+    "backgroundColor": "#101314",
+    "backgroundTextStyle": "light"
+  },
+  "navigateToMiniProgramAppIdList": ["wxef277996acc166c3"],
+  "style": "v2",
+  "renderer": "webview",
+  "componentFramework": "glass-easel",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

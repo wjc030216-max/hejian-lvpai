@@ -1,0 +1,45 @@
+<view class="share-page">
+  <view class="share-nav" style="padding-top:{{layout.navTop}}px;height:{{layout.navHeight}}px;padding-right:{{layout.navRight}}px">
+    <text class="share-back" bindtap="goHome">‹</text>
+    <text class="share-nav-title">旅行电影</text>
+  </view>
+  <view class="share-content">
+    <view wx:if="{{loading}}" class="share-empty">正在读取分享…</view>
+    <view wx:if="{{error}}" class="share-notice" bindtap="retry">{{error}} · 点击重试</view>
+
+    <block wx:if="{{item}}">
+      <view class="share-head">
+        <text class="share-title">{{item.video_name}}</text><text class="ai-badge">AI 生成</text>
+        <view class="share-meta">
+          <text wx:if="{{item.location_association}}">{{item.location_association}}</text>
+          <text wx:if="{{item.location_association}}" class="share-dot">·</text>
+          <text>{{item.completed ? '已生成' : '制作中'}}</text>
+        </view>
+        <text wx:if="{{item.story_hook}}" class="share-hook">{{item.story_hook}}</text>
+      </view>
+
+      <view class="share-assets">
+        <view class="share-asset">
+          <view class="share-frame">
+            <image wx:if="{{item.portrait_url}}" class="share-frame-media" src="{{item.portrait_url}}" mode="aspectFill" bindtap="preview"/>
+            <view wx:else class="share-frame-empty"><text class="share-symbol">▧</text><text>定妆照</text></view>
+          </view>
+          <text class="share-asset-label">定妆照</text>
+          <button wx:if="{{item.portrait_url}}" class="share-btn" data-kind="image" bindtap="save" disabled="{{saving}}">保存照片</button>
+        </view>
+
+        <view class="share-asset">
+          <view class="share-frame">
+            <video wx:if="{{item.video_url}}" class="share-frame-media" src="{{item.video_url}}" object-fit="cover" direction="0" controls/>
+            <view wx:else class="share-frame-empty"><text class="share-symbol">▷</text><text>{{item.completed?'旅行视频':'视频生成中'}}</text></view>
+          </view>
+          <text class="share-asset-label">旅行视频</text>
+          <button wx:if="{{item.video_url}}" class="share-btn" data-kind="video" bindtap="save" disabled="{{saving}}">保存视频</button>
+        </view>
+      </view>
+
+      <button class="share-primary-inline" open-type="share" disabled="{{!item}}">分享给朋友</button>
+    </block>
+  </view>
+  <view class="share-fixed"><button class="share-primary" bindtap="shoot">我也要拍同款</button></view>
+</view>

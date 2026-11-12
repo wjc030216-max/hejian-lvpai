@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+WORKDIR /app
+ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
+COPY server/local/requirements-real.txt /tmp/requirements.txt
+RUN sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.d/debian.sources || true && \
+    pip install --no-cache-dir -i ${PIP_INDEX_URL} -r /tmp/requirements.txt && \
+    apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+ARG BUILD_REVISION=unknown
+ARG BUILD_TIME=unknown
+LABEL org.opencontainers.image.revision="${BUILD_REVISION}" \
+      org.opencontainers.image.created="${BUILD_TIME}" \
+      org.opencontainers.image.title="hejian-lvpai-ai"
+COPY server/common /app/server/common
+COPY server/charactergen /app/server/charactergen
+COPY server/personattr /app/server/personattr
+COPY server/aitask /app/server/aitask
+COPY server/ai2pic/seedream_app.py /app/server/ai2pic/seedream_app.py
+COPY server/local /app/server/local
+ENV PYTHONUNBUFFERED=1 PYTHONPATH=/app/server

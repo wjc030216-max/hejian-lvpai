@@ -1,0 +1,481 @@
+# Single-node production deployment for 贺见旅拍.
+#
+# All twelve long-running services live on one host and talk to each other over the
+# compose network by service name. Only the gateway publishes ports, so the host
+# firewall / cloud security group only needs 22, 80 and 443 -- no cross-host call,
+# no private-IP rule, no 13306/16379 exposed anywhere.
+#
+# Usage (from the project root on the server):
+#   docker compose --env-file .env.single -f infra/docker-compose.single.yml up -d --build
+#   docker compose --env-file .env.single -f infra/docker-compose.single.yml ps
+#
+# `docker compose down` stops everything; named volumes keep MySQL, uploads,
+# templates, TOS records, results and logs intact.
+name: ${COMPOSE_PROJECT_NAME:-hejian-lvpai-single}
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+x-defaults: &defaults
+  restart: unless-stopped
+  logging: *default-logging
+  stop_grace_period: 30s
+
+x-build-args: &build-args
+  BUILD_REVISION: ${BUILD_REVISION:-unknown}
+  BUILD_TIME: ${BUILD_TIME:-unknown}
+
+x-cloud-env: &cloud-env
+  APP_ENV: ${APP_ENV:-staging}
+  TZ: Asia/Shanghai
+  LOCAL_CLOUD_ENABLED: ${LOCAL_CLOUD_ENABLED:-true}
+  AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET:?Fill AITRAVEL_JWT_SECRET}
+  AITRAVEL_DATABASE_URL: mysql+pymysql://${PHASE2_DB_USER}:${PHASE2_DB_PASSWORD}@mysql:3306/${PHASE2_DB_NAME}?charset=utf8mb4
+  PUBLIC_API_BASE_URL: https://${TEST_DOMAIN:?Fill TEST_DOMAIN}
+  PUBLIC_BASE_URL: https://${TEST_DOMAIN:?Fill TEST_DOMAIN}/media/${LOCAL_MEDIA_TOKEN:?Fill LOCAL_MEDIA_TOKEN}
+  LOG_COLLECTOR_URL: http://logcollector:10031/api/v1/logs/ingest
+
+services:
+  mysql:
+    <<: *defaults
+    image: mysql:8.4
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max-connections=512
+      - --innodb-buffer-pool-size=1G
+    environment:
+      MYSQL_DATABASE: ${PHASE2_DB_NAME:?Fill PHASE2_DB_NAME}
+      MYSQL_USER: ${PHASE2_DB_USER:?Fill PHASE2_DB_USER}
+      MYSQL_PASSWORD: ${PHASE2_DB_PASSWORD:?Fill PHASE2_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Fill MYSQL_ROOT_PASSWORD}
+      TZ: Asia/Shanghai
+    volumes:
+      - hejian_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+    stop_grace_period: 90s
+
+  redis:
+    <<: *defaults
+    image: redis:7.4-alpine
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Fill REDIS_PASSWORD}
+    volumes:
+      - hejian_redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+
+  file:
+    <<: *defaults
+    build:
+      context: ..
+      dockerfile: server/staging/Dockerfile-data
+      args: *build-args
+    image: hejian-single-data:latest
+    command: ["python", "/app/server/file/file_app.py"]
+    environment:
+      <<: *cloud-env
+      UPLOAD_ROOT: /var/lib/hejian-lvpai/uploads
+      PORT: 10004
+      PHASE2_AUTH_MODE: wechat
+      PHASE2_LOG_SERVICE: file
+      TOS_SERVICE_URL: http://tos:10012
+    volumes:
+      - hejian_uploads_file:/var/lib/hejian-lvpai/uploads
+      - hejian_service_logs:/var/lib/hejian-lvpai/service-logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10004/api/v1/file/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  tos:
+    <<: *defaults
+    image: hejian-single-data:latest
+    command: ["python", "/app/server/local/tos_app.py"]
+    environment:
+      <<: *cloud-env
+      PORT: 10012
+      PHASE2_AUTH_MODE: wechat
+      PHASE2_LOG_SERVICE: tos
+      TOS_ACCESS_KEY_ID: ${TOS_ACCESS_KEY_ID:?Fill TOS_ACCESS_KEY_ID}
+      TOS_ACCESS_KEY_SECRET: ${TOS_ACCESS_KEY_SECRET:?Fill TOS_ACCESS_KEY_SECRET}
+      TOS_SECURITY_TOKEN: ${TOS_SECURITY_TOKEN:-}
+      TOS_BUCKET: ${TOS_BUCKET:?Fill TOS_BUCKET}
+      TOS_REGION: ${TOS_REGION:-cn-beijing}
+      TOS_ENDPOINT: ${TOS_ENDPOINT:-https://tos-cn-beijing.volces.com}
+      TOS_KEY_PREFIX: ${TOS_KEY_PREFIX:-phase2-prod/}
+      TOS_RECORDS_ROOT: /var/lib/hejian-lvpai/tos-records
+      TOS_OBJECT_RETENTION_DAYS: ${TOS_OBJECT_RETENTION_DAYS:-90}
+      TOS_OBJECT_CLEANUP_INTERVAL_SECONDS: ${TOS_OBJECT_CLEANUP_INTERVAL_SECONDS:-3600}
+    volumes:
+      - hejian_tos_records:/var/lib/hejian-lvpai/tos-records
+      - hejian_service_logs:/var/lib/hejian-lvpai/service-logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10012/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  admin:
+    <<: *defaults
+    build:
+      context: ..
+      dockerfile: server/staging/Dockerfile-admin
+      args: *build-args
+    image: hejian-single-admin:latest
+    environment:
+      APP_ENV: ${APP_ENV:-staging}
+      TZ: Asia/Shanghai
+      PORT: "10030"
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET:?Fill AITRAVEL_JWT_SECRET}
+      AITRAVEL_DATABASE_URL: mysql+pymysql://${PHASE2_DB_USER}:${PHASE2_DB_PASSWORD}@mysql:3306/${PHASE2_DB_NAME}?charset=utf8mb4
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:?Fill ADMIN_JWT_SECRET}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?Fill ADMIN_PASSWORD_HASH}
+      MEDIA_TOKEN_TTL_SECONDS: ${ADMIN_MEDIA_TOKEN_SECONDS:-43200}
+      PUBLIC_BASE_URL: https://${TEST_DOMAIN:?Fill TEST_DOMAIN}/media/${LOCAL_MEDIA_TOKEN:?Fill LOCAL_MEDIA_TOKEN}
+      PUBLIC_API_BASE_URL: https://${TEST_DOMAIN:?Fill TEST_DOMAIN}
+      ADMIN_MAIN_URL: http://phase2-api:10020
+      PERSONATTR_SERVICE_URL: http://personattr:10002
+      CHARACTERGEN_SERVICE_URL: http://charactergen:10005
+      SEEDDANCE_SERVICE_URL: http://video:10006
+      FILE_SERVICE_URL: http://file:10004
+      TOS_SERVICE_URL: http://tos:10012
+      TOS_BUCKET: ${TOS_BUCKET:?Fill TOS_BUCKET}
+      TOS_REGION: ${TOS_REGION:-cn-beijing}
+      PHASE2_AUTH_MODE: wechat
+      PHASE2_LOG_SERVICE: admin
+      LOG_COLLECTOR_URL: http://logcollector:10031/api/v1/logs/ingest
+      ADMIN_TEMPLATE_ROOT: /var/lib/hejian-lvpai/templates
+    volumes:
+      - hejian_templates:/var/lib/hejian-lvpai/templates
+      - ${IMPORT_DIR:-../imports}:/imports:ro
+      - hejian_import_reports:/import-reports
+      - hejian_service_logs:/var/lib/hejian-lvpai/service-logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+      phase2-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10030/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  personattr:
+    <<: *defaults
+    image: hejian-single-ai:latest
+    command: ["python", "/app/server/personattr/personattr_app.py"]
+    environment:
+      <<: *cloud-env
+      PORT: 10002
+      PHASE2_LOG_SERVICE: personattr
+      PHASE2_AUTH_MODE: wechat
+      ALIBABA_CLOUD_ACCESS_KEY_ID: ${ALIBABA_CLOUD_ACCESS_KEY_ID:?Fill ALIBABA_CLOUD_ACCESS_KEY_ID}
+      ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${ALIBABA_CLOUD_ACCESS_KEY_SECRET:?Fill ALIBABA_CLOUD_ACCESS_KEY_SECRET}
+      ALIBABA_CLOUD_SECURITY_TOKEN: ${ALIBABA_CLOUD_SECURITY_TOKEN:-}
+      ALIYUN_FACE_ENDPOINT: ${ALIYUN_FACE_ENDPOINT:-facebody.cn-shanghai.aliyuncs.com}
+      ALIYUN_FACE_REGION: ${ALIYUN_FACE_REGION:-cn-shanghai}
+      EXTERNAL_DOMAIN: https://${TEST_DOMAIN:?Fill TEST_DOMAIN}/media/${LOCAL_MEDIA_TOKEN:?Fill LOCAL_MEDIA_TOKEN}
+      SERVICE_THREADS: ${PERSONATTR_SERVICE_THREADS:-64}
+    volumes:
+      - hejian_service_logs:/var/lib/hejian-lvpai/service-logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10002/api/v1/personattr/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  seedream:
+    <<: *defaults
+    build:
+      context: ..
+      dockerfile: server/staging/Dockerfile-ai
+      args: *build-args
+    image: hejian-single-ai:latest
+    command: ["python", "/app/server/ai2pic/seedream_app.py"]
+    environment:
+      <<: *cloud-env
+      PHASE2_DURABLE_TASKS: "true"
+      PHASE2_TASK_DB_POOL_SIZE: ${SEEDREAM_TASK_DB_POOL_SIZE:-80}
+      PHASE2_TASK_DB_MAX_OVERFLOW: ${SEEDREAM_TASK_DB_MAX_OVERFLOW:-20}
+      PHASE2_TASK_LEASE_SECONDS: ${PHASE2_TASK_LEASE_SECONDS:-3600}
+      PHASE2_TASK_MAX_SECONDS: ${PHASE2_TASK_MAX_SECONDS:-7200}
+      PHASE2_AUTH_MODE: wechat
+      PORT: 10008
+      PHASE2_LOG_SERVICE: seedream
+      SEEDREAM_API_KEY: ${SEEDREAM_API_KEY:?Fill SEEDREAM_API_KEY}
+      SEEDREAM_MODEL: ${SEEDREAM_MODEL:-doubao-seedream-5-0-pro-260628}
+      SEEDREAM_MIN_SIZE: 1K
+      FILE_SERVICE_URL: http://file:10004
+      EXTERNAL_DOMAIN: https://${TEST_DOMAIN:?Fill TEST_DOMAIN}/media/${LOCAL_MEDIA_TOKEN:?Fill LOCAL_MEDIA_TOKEN}
+      TOS_SERVICE_URL: http://tos:10012
+      SERVICE_THREADS: ${SEEDREAM_SERVICE_THREADS:-500}
+      CHANNEL_TIMEOUT: ${SEEDREAM_CHANNEL_TIMEOUT:-300}
+    volumes:
+      - hejian_service_logs:/var/lib/hejian-lvpai/service-logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+      file:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10008/api/v1/images/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  charactergen:
+    <<: *defaults
+    image: hejian-single-ai:latest
+    command: ["python", "/app/server/charactergen/charactergen_app.py"]
+    environment:
+      <<: *cloud-env
+      PHASE2_DURABLE_TASKS: "true"
+      PHASE2_TASK_DB_POOL_SIZE: ${CHARACTER_TASK_DB_POOL_SIZE:-80}
+      PHASE2_TASK_DB_MAX_OVERFLOW: ${CHARACTER_TASK_DB_MAX_OVERFLOW:-20}
+      PHASE2_TASK_LEASE_SECONDS: ${PHASE2_TASK_LEASE_SECONDS:-3600}
+      PHASE2_TASK_MAX_SECONDS: ${PHASE2_TASK_MAX_SECONDS:-7200}
+      PORT: 10005
+      PHASE2_TEMPLATE_API_URL: http://phase2-api:10020/api/v2/templates
+      IMAGE_SERVICE_URL: http://seedream:10008
+      EXTERNAL_DOMAIN: https://${TEST_DOMAIN:?Fill TEST_DOMAIN}/media/${LOCAL_MEDIA_TOKEN:?Fill LOCAL_MEDIA_TOKEN}
+      PHASE2_AUTH_MODE: wechat
+      PHASE2_LOG_SERVICE: charactergen
+      PHASE2_GENERATION_WORKERS: ${CHARACTER_GENERATION_WORKERS:-200}
+      SERVICE_THREADS: ${CHARACTER_SERVICE_THREADS:-64}
+    volumes:
+      - hejian_service_logs:/var/lib/hejian-lvpai/service-logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+      seedream:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10005/api/v1/image/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  video:
+    <<: *defaults
+    image: hejian-single-ai:latest
+    command: ["python", "/app/server/aitask/seeddance_video_app.py"]
+    environment:
+      <<: *cloud-env
+      PHASE2_DURABLE_TASKS: "true"
+      PHASE2_TASK_DB_POOL_SIZE: ${VIDEO_TASK_DB_POOL_SIZE:-60}
+      PHASE2_TASK_DB_MAX_OVERFLOW: ${VIDEO_TASK_DB_MAX_OVERFLOW:-20}
+      PHASE2_TASK_LEASE_SECONDS: ${PHASE2_TASK_LEASE_SECONDS:-3600}
+      PHASE2_TASK_MAX_SECONDS: ${PHASE2_TASK_MAX_SECONDS:-7200}
+      PORT: 10006
+      SEEDANCE_API_KEY: ${SEEDANCE_API_KEY:?Fill SEEDANCE_API_KEY}
+      SEEDANCE_MODEL: ${SEEDANCE_MODEL:-doubao-seedance-2-0-fast-260128}
+      SEEDANCE_ASSET_ACCESS_KEY_ID: ${SEEDANCE_ASSET_ACCESS_KEY_ID:?Fill SEEDANCE_ASSET_ACCESS_KEY_ID}
+      SEEDANCE_ASSET_ACCESS_KEY_SECRET: ${SEEDANCE_ASSET_ACCESS_KEY_SECRET:?Fill SEEDANCE_ASSET_ACCESS_KEY_SECRET}
+      SEEDANCE_ASSET_GROUP_ID: ${SEEDANCE_ASSET_GROUP_ID:?Fill SEEDANCE_ASSET_GROUP_ID}
+      SEEDANCE_ASSET_PROJECT_NAME: ${SEEDANCE_ASSET_PROJECT_NAME:-default}
+      TOS_SERVICE_URL: http://tos:10012
+      LOCAL_RESULT_ROOT: /var/lib/hejian-lvpai/results
+      LOCAL_RESULT_STORAGE: tos
+      EXTERNAL_DOMAIN: https://${TEST_DOMAIN:?Fill TEST_DOMAIN}/media/${LOCAL_MEDIA_TOKEN:?Fill LOCAL_MEDIA_TOKEN}
+      PHASE2_AUTH_MODE: wechat
+      PHASE2_LOG_SERVICE: video
+      PHASE2_GENERATION_WORKERS: ${VIDEO_GENERATION_WORKERS:-40}
+      PHASE2_TEMPLATE_API_URL: http://phase2-api:10020/api/v2/templates
+      PHASE2_VIDEO_MAX_INFLIGHT: ${PHASE2_VIDEO_MAX_INFLIGHT:-40}
+      SERVICE_THREADS: ${VIDEO_SERVICE_THREADS:-64}
+    volumes:
+      - hejian_results:/var/lib/hejian-lvpai/results
+      - hejian_service_logs:/var/lib/hejian-lvpai/service-logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10006/api/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  phase2-api:
+    <<: *defaults
+    env_file:
+      - path: ../allinpay.env
+        required: false
+    build:
+      context: ..
+      dockerfile: server/staging/Dockerfile-main
+      args: *build-args
+    image: hejian-single-main:latest
+    command: ["python", "/app/server/phase2/phase2_app.py"]
+    environment:
+      APP_ENV: ${APP_ENV:-staging}
+      TZ: Asia/Shanghai
+      PHASE2_AUTH_MODE: wechat
+      PHASE2_STATE_BACKEND: mysql
+      AITRAVEL_DATABASE_URL: mysql+pymysql://${PHASE2_DB_USER}:${PHASE2_DB_PASSWORD}@mysql:3306/${PHASE2_DB_NAME}?charset=utf8mb4
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET:?Fill AITRAVEL_JWT_SECRET}
+      WECHAT_APP_ID: ${WECHAT_APP_ID:?Fill WECHAT_APP_ID}
+      WECHAT_APP_SECRET: ${WECHAT_APP_SECRET:?Fill WECHAT_APP_SECRET}
+      WECHAT_SUBSCRIBE_TEMPLATE_ID: ${WECHAT_SUBSCRIBE_TEMPLATE_ID:-}
+      WECHAT_SUBSCRIBE_MINIPROGRAM_STATE: ${WECHAT_SUBSCRIBE_MINIPROGRAM_STATE:-formal}
+      PHASE2_DB_HOST: mysql
+      PHASE2_DB_PORT: 3306
+      PHASE2_DB_NAME: ${PHASE2_DB_NAME:?Fill PHASE2_DB_NAME}
+      PHASE2_DB_USER: ${PHASE2_DB_USER:?Fill PHASE2_DB_USER}
+      PHASE2_DB_PASSWORD: ${PHASE2_DB_PASSWORD:?Fill PHASE2_DB_PASSWORD}
+      PHASE2_UPLOAD_ROOT: /var/lib/hejian-lvpai/uploads
+      PHASE2_STATIC_ROOT: /app/client/assets
+      PUBLIC_API_BASE_URL: https://${TEST_DOMAIN:?Fill TEST_DOMAIN}
+      PHASE2_TEMPLATE_PREVIEW_VERSION: ${PHASE2_TEMPLATE_PREVIEW_VERSION:-720p-20261104}
+      PHASE2_MEDIA_DIRECT: ${PHASE2_MEDIA_DIRECT:-false}
+      PUBLIC_BASE_URL: https://${TEST_DOMAIN:?Fill TEST_DOMAIN}/media/${LOCAL_MEDIA_TOKEN:?Fill LOCAL_MEDIA_TOKEN}
+      PHASE2_PAYMENT_MODE: ${PHASE2_PAYMENT_MODE:-allinpay}
+      WECHAT_PAY_APPID: ${WECHAT_PAY_APPID:-}
+      WECHAT_PAY_MCHID: ${WECHAT_PAY_MCHID:-}
+      WECHAT_PAY_APIV3_KEY: ${WECHAT_PAY_APIV3_KEY:-}
+      WECHAT_PAY_CERT_SERIAL_NO: ${WECHAT_PAY_CERT_SERIAL_NO:-}
+      WECHAT_PAY_PLATFORM_CERT_SERIAL_NO: ${WECHAT_PAY_PLATFORM_CERT_SERIAL_NO:-}
+      WECHAT_PAY_PRIVATE_KEY_PATH: ${WECHAT_PAY_PRIVATE_KEY_PATH:-/app/server/phase2/cert/apiclient_key.pem}
+      WECHAT_PAY_CERT_PATH: ${WECHAT_PAY_CERT_PATH:-/app/server/phase2/cert/apiclient_cert.pem}
+      WECHAT_PAY_PLATFORM_PUB_KEY_PATH: ${WECHAT_PAY_PLATFORM_PUB_KEY_PATH:-/app/server/phase2/cert/wechatpay_pub.pem}
+      WECHAT_PAY_NOTIFY_URL: ${WECHAT_PAY_NOTIFY_URL:-}
+      AITRAVEL_AIVIDEO_PRICE_FEN: ${AITRAVEL_AIVIDEO_PRICE_FEN:-}
+      PHASE2_FREE_QUOTA_TOTAL: ${PHASE2_FREE_QUOTA_TOTAL:-0}
+      PHASE2_AGREEMENT_VERSION: ${PHASE2_AGREEMENT_VERSION:-travel-photo-v1}
+      PHASE2_CORS_ORIGINS: ${PHASE2_CORS_ORIGINS:-}
+      PHASE2_PROJECTS_PER_HOUR: ${PHASE2_PROJECTS_PER_HOUR:-30}
+      PHASE2_UPLOADS_PER_10_MINUTES: ${PHASE2_UPLOADS_PER_10_MINUTES:-30}
+      PHASE2_SUBSCRIBE_MAX_ATTEMPTS: ${PHASE2_SUBSCRIBE_MAX_ATTEMPTS:-8}
+      PHASE2_USER_RETENTION_DAYS: ${PHASE2_USER_RETENTION_DAYS:-90}
+      PHASE2_AI_ORCHESTRATION_ENABLED: "true"
+      PHASE2_ORCHESTRATOR_WORKERS: ${PHASE2_ORCHESTRATOR_WORKERS:-64}
+      PHASE2_PROJECT_DB_POOL_SIZE: ${PHASE2_PROJECT_DB_POOL_SIZE:-32}
+      PHASE2_PROJECT_DB_MAX_OVERFLOW: ${PHASE2_PROJECT_DB_MAX_OVERFLOW:-16}
+      PHASE2_TASK_MAX_SECONDS: ${PHASE2_TASK_MAX_SECONDS:-7200}
+      PHASE2_PROJECT_MAX_SECONDS: ${PHASE2_PROJECT_MAX_SECONDS:-7200}
+      PHASE2_RETENTION_BATCH_SIZE: ${PHASE2_RETENTION_BATCH_SIZE:-100}
+      PHASE2_RETENTION_INTERVAL_SECONDS: ${PHASE2_RETENTION_INTERVAL_SECONDS:-300}
+      PHASE2_RETENTION_TIME_BUDGET_SECONDS: ${PHASE2_RETENTION_TIME_BUDGET_SECONDS:-240}
+      SERVICE_THREADS: ${SERVICE_THREADS:-64}
+      LOCAL_CLOUD_ENABLED: ${LOCAL_CLOUD_ENABLED:-true}
+      PHASE2_LOG_SERVICE: phase2-api
+      LOG_COLLECTOR_URL: http://logcollector:10031/api/v1/logs/ingest
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Fill REDIS_PASSWORD}@redis:6379/2
+      PERSONATTR_SERVICE_URL: http://personattr:10002
+      CHARACTERGEN_SERVICE_URL: http://charactergen:10005
+      SEEDDANCE_SERVICE_URL: http://video:10006
+      FILE_SERVICE_URL: http://file:10004
+      TOS_SERVICE_URL: http://tos:10012
+      LOCAL_MEDIA_TOKEN: ${LOCAL_MEDIA_TOKEN:?Fill LOCAL_MEDIA_TOKEN}
+      CHANNEL_TIMEOUT: ${CHANNEL_TIMEOUT:-120}
+    volumes:
+      - hejian_uploads_api:/var/lib/hejian-lvpai/uploads
+      - ${WECHAT_PAY_CERT_DIR:-../certs}:/app/server/phase2/cert:ro
+      - hejian_service_logs:/var/lib/hejian-lvpai/service-logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      personattr:
+        condition: service_healthy
+      charactergen:
+        condition: service_healthy
+      video:
+        condition: service_healthy
+      file:
+        condition: service_healthy
+      tos:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10020/api/v2/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  logcollector:
+    <<: *defaults
+    image: hejian-single-main:latest
+    command: ["python", "/app/server/logcollector/logcollector_app.py"]
+    environment:
+      APP_ENV: ${APP_ENV:-staging}
+      TZ: Asia/Shanghai
+      PORT: "10031"
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET:?Fill AITRAVEL_JWT_SECRET}
+      AITRAVEL_DATABASE_URL: mysql+pymysql://${PHASE2_DB_USER}:${PHASE2_DB_PASSWORD}@mysql:3306/${PHASE2_DB_NAME}?charset=utf8mb4
+      LOG_ROOT: /var/lib/hejian-lvpai/logs
+      PHASE2_LOG_RETENTION_SECONDS: ${PHASE2_LOG_RETENTION_SECONDS:-0}
+    volumes:
+      - hejian_logs:/var/lib/hejian-lvpai/logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10031/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  gateway:
+    <<: *defaults
+    image: nginx:1.27.5-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      TEST_DOMAIN: ${TEST_DOMAIN:?Fill TEST_DOMAIN}
+      LOCAL_MEDIA_TOKEN: ${LOCAL_MEDIA_TOKEN:?Fill LOCAL_MEDIA_TOKEN}
+    volumes:
+      - ./nginx.single.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${TLS_DIR:-../tls}:/etc/nginx/tls:ro
+      - ../certbot-webroot:/var/www/certbot
+    depends_on:
+      phase2-api:
+        condition: service_healthy
+      admin:
+        condition: service_healthy
+      file:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  hejian_mysql:
+  hejian_redis:
+  hejian_uploads_file:
+  hejian_uploads_api:
+  hejian_templates:
+  hejian_tos_records:
+  hejian_results:
+  hejian_logs:
+  hejian_service_logs:
+  hejian_import_reports:

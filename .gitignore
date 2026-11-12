@@ -1,0 +1,27 @@
+# Python/runtime output
+__pycache__/
+*.py[cod]
+*.log
+
+# 模板素材体积大，不入库（部署时由本地/服务器提供）
+测试模板/
+
+# Local secrets and generated phase2 assets
+.env
+.env.*
+!.env.local.example
+server/phase2/uploads/
+server/phase2/instance/
+server/phase2/cert/
+server/file/data/
+server/logs/
+
+!.env.local.real.example
+local-backups/
+local-reports/
+
+!.env.staging.example
+!infra/staging/*.env.example
+deploy-config/
+dist/
+tls/

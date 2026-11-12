@@ -1,0 +1,14 @@
+FROM python:3.11-slim
+WORKDIR /app
+COPY server/local/requirements-tos.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+ARG BUILD_REVISION=unknown
+ARG BUILD_TIME=unknown
+LABEL org.opencontainers.image.revision="${BUILD_REVISION}" \
+      org.opencontainers.image.created="${BUILD_TIME}" \
+      org.opencontainers.image.title="hejian-lvpai-tos"
+COPY server/common /app/server/common
+COPY server/local /app/server/local
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app/server
+CMD ["python", "-m", "local.tos_app"]

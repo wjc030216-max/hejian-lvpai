@@ -1,0 +1,88 @@
+# Only this gateway is public. Private service and database ports never proxy outward.
+resolver 127.0.0.11 valid=5s ipv6=off;
+upstream phase2_main { zone phase2_main 64k; server phase2-api:10020 resolve; keepalive 32; }
+limit_req_zone $binary_remote_addr zone=login:10m rate=5r/s;
+server {
+  listen 80;
+  server_name ${TEST_DOMAIN};
+  location /.well-known/acme-challenge/ {
+    root /var/www/certbot;
+  }
+  location / {
+    return 301 https://$host$request_uri;
+  }
+}
+server {
+  listen 443 ssl;
+  http2 on;
+  server_name ${TEST_DOMAIN};
+  ssl_certificate /etc/nginx/tls/fullchain.pem;
+  ssl_certificate_key /etc/nginx/tls/privkey.pem;
+  ssl_protocols TLSv1.2 TLSv1.3;
+  client_max_body_size 32m;
+  access_log off;
+  add_header X-Content-Type-Options nosniff always;
+  location = /api/v2/auth/login {
+    limit_req zone=login burst=10 nodelay;
+    proxy_pass http://phase2_main;
+  }
+  location = /admin { return 301 /admin/; }
+  location /admin/ {
+    client_max_body_size 128m;
+    proxy_read_timeout 180s;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_pass http://${DATA_PRIVATE_IP}:18030;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP $remote_addr;
+  }
+  location /media/${LOCAL_MEDIA_TOKEN}/assets/managed/ {
+    limit_except GET { deny all; }
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_pass http://${DATA_PRIVATE_IP}:18030/media-assets/;
+    proxy_hide_header Cache-Control;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+  }
+  location /api/v2/ {
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_pass http://phase2_main;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP $remote_addr;
+  }
+  location ~ ^/api/v2/(results|portraits)/ {
+    proxy_pass http://phase2_main;
+    proxy_buffering off;
+    proxy_read_timeout 600s;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP $remote_addr;
+  }
+  location /assets/ {
+    limit_except GET { deny all; }
+    proxy_pass http://phase2_main;
+  }
+  location = /media/${LOCAL_MEDIA_TOKEN}/ready {
+    limit_except GET { deny all; }
+    proxy_pass http://phase2_main/api/v2/media-ready;
+  }
+  location /media/${LOCAL_MEDIA_TOKEN}/assets/ {
+    limit_except GET { deny all; }
+    proxy_pass http://phase2_main/assets/;
+  }
+  location /media/${LOCAL_MEDIA_TOKEN}/api/v2/assets/ {
+    limit_except GET { deny all; }
+    proxy_pass http://phase2_main/api/v2/assets/;
+  }
+  location /media/${LOCAL_MEDIA_TOKEN}/aitravel/api/v1/file/download/ {
+    limit_except GET { deny all; }
+    proxy_pass http://${DATA_PRIVATE_IP}:18004/api/v1/file/download/;
+  }
+  location / { return 404; }
+}

@@ -1,0 +1,34 @@
+{
+  "setting": {
+    "es6": true,
+    "postcss": true,
+    "minified": true,
+    "uglifyFileName": false,
+    "enhance": true,
+    "packNpmRelationList": [],
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    },
+    "useCompilerPlugins": false,
+    "minifyWXML": true,
+    "minifyWXSS": true
+  },
+  "compileType": "miniprogram",
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [
+      {
+        "type": "folder",
+        "value": "assets"
+      }
+    ],
+    "include": []
+  },
+  "appid": "wx38f0f125309bc236",
+  "editorSetting": {},
+  "projectname": "贺见旅拍",
+  "miniprogramRoot": "client/",
+  "libVersion": "3.13.0"
+}

@@ -1,0 +1,2 @@
+-- Phase-two tables are initialized by MySQLStore and TaskJournal.
+-- Historical tables are retained in existing volumes; no DROP is performed.

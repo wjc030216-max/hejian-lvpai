@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "scripts": {
+    "test:admin-ui": "node test_admin_ui.js",
+    "test:client-layout": "node check_frontend_layout.js"
+  },
+  "devDependencies": {
+    "playwright": "1.55.0"
+  }
+}

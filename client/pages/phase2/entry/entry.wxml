@@ -1,0 +1,155 @@
+<view class="home-page">
+  <view wx:if="{{guideVisible}}" class="guide-card">
+    <view class="guide-badge">AI 旅拍</view>
+    <text class="guide-title">上传一张正脸照，生成你的旅行电影</text>
+    <text class="guide-sub">选模板 → 传照片 → 自动生成定妆照与旅行视频，可保存和分享</text>
+    <button class="guide-cta" bindtap="dismissGuide">开始逛逛</button>
+  </view>
+
+  <view class="nav" style="padding-top:{{layout.navTop}}px;height:{{layout.navHeight}}px;padding-right:{{layout.navRight}}px"></view>
+
+  <view class="home-logo" style="top:{{layout.navTop}}px;height:{{layout.navHeight}}px">
+    <image class="home-logo-img" src="{{logoSrc}}" mode="heightFix" aria-label="贺见旅拍" binderror="logoError" />
+  </view>
+  <view class="home-top" style="top:{{layout.navTop + layout.navHeight + 12}}px">
+    <view class="top-pill works-pill" bindtap="goWorks" aria-role="button" aria-label="我的作品">
+      <view class="ic ic-gallery"></view>
+      <text class="top-pill-text">我的作品</text>
+      <text wx:if="{{unreadCount}}" class="chip-dot {{unreadAlert?'alert':''}}">{{unreadCount}}</text>
+    </view>
+    <view class="mute-btn" bindtap="mute" aria-role="button" aria-label="{{muted?'打开声音':'静音'}}">
+      <view class="ic {{muted?'ic-mute':'ic-sound'}}"></view>
+    </view>
+  </view>
+
+  <view wx:if="{{error}}" class="home-empty">
+    <text>{{error}}</text>
+    <button class="secondary" bindtap="retry">重新加载</button>
+  </view>
+  <view wx:elif="{{!feedItems.length}}" class="home-empty">
+    <text>{{loading?'正在加载模板…':'还没有符合条件的模板'}}</text>
+    <text class="muted">{{loading?'':'请稍后重试'}}</text>
+    <button wx:if="{{!loading}}" class="secondary" bindtap="retry">重新加载</button>
+  </view>
+  <swiper wx:else class="template-swiper" vertical="{{true}}" current="{{swiperCurrent}}" bindchange="slide" duration="250">
+    <swiper-item wx:for="{{feedItems}}" wx:key="template_code">
+      <view class="stage">
+        <video wx:if="{{index===swiperCurrent && playing && active && !drawer}}" id="sample-{{item.template_code}}" class="stage-media" src="{{item.example}}" poster="{{item.cover}}" object-fit="cover" autoplay="{{true}}" loop="{{true}}" muted="{{muted}}" controls="{{false}}" show-center-play-btn="{{true}}" show-loading="{{true}}" show-progress="{{false}}" show-fullscreen-btn="{{false}}" enable-progress-gesture="{{false}}" vslide-gesture="{{false}}" bindtap="play" binderror="videoFailed" />
+        <image wx:elif="{{index>=swiperCurrent-1 && index<=swiperCurrent+1}}" class="stage-media" src="{{item.cover}}" mode="aspectFill" lazy-load="{{true}}" bindtap="play" />
+        <view wx:else class="stage-media stage-placeholder"></view>
+        <view class="stage-vignette"></view>
+        <view wx:if="{{!playing && index===swiperCurrent}}" class="play-pill" bindtap="play">▷ {{videoError?'播放失败，点此重试':item.example?'点击播放样片':'示例视频待配置'}}</view>
+
+        <view class="home-bottom">
+          <view class="template-caption">
+            <text class="film-title">{{item.video_name}}</text>
+            <view class="film-meta">
+              <text>{{item.actor_count}} 人</text>
+              <text class="sep">·</text>
+              <text>{{item.video_genre}}</text>
+              <block wx:if="{{item.video_specification}}">
+                <text class="sep">·</text>
+                <text>{{item.video_specification}}</text>
+              </block>
+              <block wx:if="{{item.heatText}}">
+                <text class="sep">·</text>
+                <text>{{item.heatText}}</text>
+              </block>
+            </view>
+            <text class="film-hook">{{item.story_hook}}</text>
+          </view>
+
+          <view class="home-actions">
+            <view class="round-action-slot">
+              <button class="round-action" open-type="share">
+                <view class="action-bubble"><view class="ic ic-share"></view></view>
+                <text>分享</text>
+              </button>
+            </view>
+            <view class="shoot {{(!item || creating || loading) ? 'is-disabled' : ''}}" hover-class="shoot-hover" bindtap="shoot" aria-role="button" aria-label="拍同款">
+              <block wx:if="{{creating}}">
+                <text class="shoot-loading">正在进入…</text>
+              </block>
+              <block wx:else>
+                <view class="shoot-icon"></view>
+                <text>拍同款</text>
+              </block>
+            </view>
+            <view class="round-action-slot">
+              <view class="round-action" bindtap="openMore">
+                <view class="action-bubble"><view class="ic ic-grid"></view></view>
+                <text>更多模板</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </swiper-item>
+  </swiper>
+
+  <view wx:if="{{swipeHint}}" class="swipe-guide">
+    <view class="swipe-hand">🖐</view>
+    <text class="swipe-guide-text">上下滑动，切换样片</text>
+  </view>
+
+  <view wx:if="{{!drawer}}" class="side-nav">
+    <view class="side-nav-btn" bindtap="prev" aria-role="button" aria-label="上一个模板">↑</view>
+    <view class="side-nav-btn" bindtap="next" aria-role="button" aria-label="下一个模板">↓</view>
+  </view>
+
+  <view wx:if="{{drawer}}" class="drawer-mask" bindtap="closeDrawer">
+    <view class="drawer" catchtap="noop">
+      <view class="drawer-title">
+        <text>更多模板 <text class="muted">{{gridTotal}}款</text></text>
+        <text bindtap="closeDrawer">关闭 ×</text>
+      </view>
+      <view class="filter-panel">
+        <view class="filter-grid">
+          <picker class="filter-picker" mode="selector" range="{{peopleOptions}}" value="{{peopleValue}}" bindchange="onPeoplePick">
+            <view class="filter-field {{gridFilters.actor_count?'on':''}}">
+              <view class="filter-field-head">
+                <text class="filter-label">人数</text>
+                <text class="filter-caret">⌄</text>
+              </view>
+              <text class="filter-value">{{gridFilters.actor_count?gridFilters.actor_count+'人':'不限'}}</text>
+            </view>
+          </picker>
+            <picker wx:if="{{gridFilters.actor_count==='1'}}" class="filter-picker" mode="selector" range="{{genderOptions}}" value="{{genderValue}}" bindchange="onGenderPick">
+              <view class="filter-field {{gridFilters.gender?'on':''}}">
+                <view class="filter-field-head">
+                  <text class="filter-label">关系/性别</text>
+                  <text class="filter-caret">⌄</text>
+                </view>
+                <text class="filter-value">{{gridFilters.gender || '不限'}}</text>
+              </view>
+            </picker>
+            <picker wx:else class="filter-picker" mode="selector" range="{{relationOptions}}" value="{{relationValue}}" bindchange="onRelationPick">
+              <view class="filter-field {{gridFilters.relationship?'on':''}}">
+                <view class="filter-field-head">
+                  <text class="filter-label">关系/性别</text>
+                  <text class="filter-caret">⌄</text>
+                </view>
+                <text class="filter-value">{{gridFilters.relationship || '不限'}}</text>
+              </view>
+            </picker>
+        </view>
+      </view>
+      <scroll-view scroll-y class="catalog-scroll" bindscrolltolower="loadMore">
+          <view class="catalog-grid">
+            <view wx:for="{{gridItems}}" wx:key="template_code" class="catalog-card" data-code="{{item.template_code}}" bindtap="selectCard">
+              <image src="{{item.cover}}" mode="aspectFill" lazy-load="{{true}}"/>
+              <text>{{item.video_name}}</text>
+              <text class="muted">{{item.video_genre}} · {{item.video_specification || '竖屏视频'}}</text>
+              <view class="card-sample-btn">查看样片 ›</view>
+            </view>
+          </view>
+          <button class="text-button" wx:if="{{gridNextOffset!==null}}" bindtap="loadMore">{{gridLoading?'正在加载…':gridError || '加载更多'}}</button>
+          <view wx:else class="empty-note">{{gridItems.length?'已加载全部匹配模板':'暂无匹配模板'}}</view>
+      </scroll-view>
+      <view class="drawer-bottom">
+        <text bindtap="clearGrid">清除筛选</text>
+        <text class="gold" bindtap="closeDrawer">返回看样片</text>
+      </view>
+    </view>
+  </view>
+</view>

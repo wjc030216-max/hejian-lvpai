@@ -1,0 +1,4 @@
+FROM hejian-lvpai-test-data-admin:batch-base
+COPY server/common /app/server/common
+COPY server/phase2 /app/server/phase2
+COPY server/admin /app/server/admin

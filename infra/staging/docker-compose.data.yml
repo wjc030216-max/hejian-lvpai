@@ -1,0 +1,228 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${PHASE2_DB_NAME}
+      MYSQL_USER: ${PHASE2_DB_USER}
+      MYSQL_PASSWORD: ${PHASE2_DB_PASSWORD:?Fill database password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Fill database root password}
+    ports:
+    - ${DATA_PRIVATE_IP:-10.0.0.11}:13306:3306
+    volumes:
+    - phase2_mysql:/var/lib/mysql
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD}
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    stop_grace_period: 60s
+    command:
+    - --character-set-server=utf8mb4
+    - --collation-server=utf8mb4_unicode_ci
+    - --innodb-buffer-pool-size=1G
+    - --max-connections=512
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command:
+    - sh
+    - -c
+    - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    ports:
+    - ${DATA_PRIVATE_IP:-10.0.0.11}:16379:6379
+    volumes:
+    - phase2_redis:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    stop_grace_period: 60s
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Fill Redis password}
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG
+      interval: 10s
+      timeout: 3s
+      retries: 20
+  file:
+    build:
+      context: ../..
+      dockerfile: server/staging/Dockerfile-data
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-staging}
+      TZ: Asia/Shanghai
+      BUILD_REVISION: ${BUILD_REVISION:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-unknown}
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET}
+      UPLOAD_ROOT: /var/lib/hejian-lvpai/uploads
+      PORT: 10004
+      PHASE2_AUTH_MODE: wechat
+      LOCAL_CLOUD_ENABLED: ${LOCAL_CLOUD_ENABLED:-false}
+      PHASE2_LOG_SERVICE: file
+      LOG_COLLECTOR_URL: http://${MAIN_PRIVATE_IP:-10.0.0.12}:18031/api/v1/logs/ingest
+      TOS_SERVICE_URL: http://${DATA_PRIVATE_IP:-10.0.0.11}:18012
+    ports:
+    - ${DATA_PRIVATE_IP:-10.0.0.11}:18004:10004
+    volumes:
+    - phase2_uploads:/var/lib/hejian-lvpai/uploads
+    - /opt/hejian-lvpai/node-logs/data:/var/lib/hejian-lvpai/service-logs
+    command:
+    - python
+    - /app/server/file/file_app.py
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    stop_grace_period: 60s
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:10004/api/v1/file/health')
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+  tos:
+    build:
+      context: ../..
+      dockerfile: server/staging/Dockerfile-data
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-staging}
+      TZ: Asia/Shanghai
+      BUILD_REVISION: ${BUILD_REVISION:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-unknown}
+      LOCAL_CLOUD_ENABLED: ${LOCAL_CLOUD_ENABLED:-false}
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET}
+      TOS_ACCESS_KEY_ID: ${TOS_ACCESS_KEY_ID}
+      TOS_ACCESS_KEY_SECRET: ${TOS_ACCESS_KEY_SECRET}
+      TOS_SECURITY_TOKEN: ${TOS_SECURITY_TOKEN}
+      TOS_BUCKET: ${TOS_BUCKET}
+      TOS_REGION: ${TOS_REGION}
+      TOS_ENDPOINT: ${TOS_ENDPOINT}
+      TOS_KEY_PREFIX: ${TOS_KEY_PREFIX}
+      TOS_RECORDS_ROOT: /var/lib/hejian-lvpai/tos-records
+      TOS_OBJECT_RETENTION_DAYS: ${TOS_OBJECT_RETENTION_DAYS:-90}
+      TOS_SIGNED_URL_TTL_SECONDS: ${TOS_SIGNED_URL_TTL_SECONDS:-86400}
+      TOS_OBJECT_CLEANUP_INTERVAL_SECONDS: ${TOS_OBJECT_CLEANUP_INTERVAL_SECONDS:-3600}
+      AITRAVEL_DATABASE_URL: mysql+pymysql://${PHASE2_DB_USER}:${PHASE2_DB_PASSWORD}@mysql:3306/${PHASE2_DB_NAME}?charset=utf8mb4
+      PORT: 10012
+      PHASE2_AUTH_MODE: wechat
+      PHASE2_LOG_SERVICE: tos
+      LOG_COLLECTOR_URL: http://${MAIN_PRIVATE_IP:-10.0.0.12}:18031/api/v1/logs/ingest
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+    - ${DATA_PRIVATE_IP:-10.0.0.11}:18012:10012
+    volumes:
+    - phase2_tos:/var/lib/hejian-lvpai/tos-records
+    - /opt/hejian-lvpai/node-logs/data:/var/lib/hejian-lvpai/service-logs
+    command:
+    - python
+    - /app/server/local/tos_app.py
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    stop_grace_period: 60s
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:10012/health')
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+  admin:
+    build:
+      context: ../..
+      dockerfile: server/staging/Dockerfile-admin
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-staging}
+      TZ: Asia/Shanghai
+      BUILD_REVISION: ${BUILD_REVISION:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-unknown}
+      PORT: '10030'
+      AITRAVEL_DATABASE_URL: mysql+pymysql://${PHASE2_DB_USER}:${PHASE2_DB_PASSWORD}@mysql:3306/${PHASE2_DB_NAME}?charset=utf8mb4
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET:?Generate administrator config}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?Generate administrator password
+        hash}
+      MEDIA_TOKEN_TTL_SECONDS: ${ADMIN_MEDIA_TOKEN_SECONDS:-43200}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL}
+      ADMIN_MAIN_URL: http://${MAIN_PRIVATE_IP:-10.0.0.12}:18020
+      PERSONATTR_SERVICE_URL: http://${AI_PRIVATE_IP:-10.0.0.13}:18002
+      CHARACTERGEN_SERVICE_URL: http://${AI_PRIVATE_IP:-10.0.0.13}:18005
+      SEEDDANCE_SERVICE_URL: http://${AI_PRIVATE_IP:-10.0.0.13}:18006
+      FILE_SERVICE_URL: http://file:10004
+      TOS_SERVICE_URL: http://${DATA_PRIVATE_IP:-10.0.0.11}:18012
+      TOS_BUCKET: ${TOS_BUCKET}
+      TOS_REGION: ${TOS_REGION}
+      PHASE2_AUTH_MODE: wechat
+      PHASE2_LOG_SERVICE: admin
+      LOG_COLLECTOR_URL: http://${MAIN_PRIVATE_IP:-10.0.0.12}:18031/api/v1/logs/ingest
+      ADMIN_TEMPLATE_ROOT: /var/lib/hejian-lvpai/templates
+      PHASE2_FREE_QUOTA_TOTAL: ${PHASE2_FREE_QUOTA_TOTAL:-0}
+    ports:
+    - ${DATA_PRIVATE_IP:-10.0.0.11}:18030:10030
+    volumes:
+    - phase2_templates:/var/lib/hejian-lvpai/templates
+    - /opt/hejian-lvpai/imports:/imports:ro
+    - /opt/hejian-lvpai/import-reports:/import-reports
+    - /opt/hejian-lvpai/node-logs/data:/var/lib/hejian-lvpai/service-logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:10030/health')
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    stop_grace_period: 60s
+volumes:
+  phase2_mysql: null
+  phase2_redis: null
+  phase2_uploads: null
+  phase2_tos: null
+  phase2_templates: {}
+name: ${COMPOSE_PROJECT_NAME:-hejian-lvpai-test-data}

@@ -1,0 +1,63 @@
+@import "../../../styles/phase2-v2.wxss";
+
+.status-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 8rpx;
+  color: #A9B3AD;
+  font-size: 21rpx;
+  background: #13211F;
+  padding: 8rpx 14rpx;
+  border-radius: 10rpx;
+  border: 1rpx solid var(--line);
+  white-space: nowrap;
+}
+.status-capsule .unread { color: var(--gold); margin-left: 6rpx; }
+.status-capsule.done { color: var(--gold); border-color: rgba(242, 208, 140, .5); background: rgba(242, 208, 140, .08); }
+.status-capsule.working { color: var(--teal); border-color: rgba(95, 224, 207, .5); background: rgba(95, 224, 207, .08); }
+.status-capsule.unpaid { color: #F0D9A6; border-color: rgba(242, 208, 140, .4); }
+.status-capsule.failed { color: var(--danger); border-color: rgba(231, 139, 127, .5); background: rgba(231, 139, 127, .08); }
+.status-capsule.archived { color: #7E8B86; }
+
+.collection { padding: 24rpx; background: var(--bg-card); border: 1rpx solid var(--line); border-radius: 24rpx; margin-top: 24rpx; }
+.collection-heading { display: flex; justify-content: space-between; gap: 12rpx; align-items: flex-start; }
+.collection-title-wrap { flex: 1; min-width: 0; }
+.collection-heading .section-title { font-size: 32rpx; }
+.collection .asset-pair { gap: 20rpx; margin: 22rpx 0 0; }
+
+.mini-spinner {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  border: 4rpx solid rgba(95, 224, 207, .2);
+  border-top-color: var(--teal);
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.asset-placeholder.working { color: #C8D2CD; }
+.asset-actions { display: flex; gap: 10rpx; margin-top: 14rpx; }
+.asset-btn { flex: 1; min-width: 0; padding: 12rpx 0; font-size: 21rpx; }
+.fail-note {
+  margin-top: 18rpx;
+  padding: 14rpx 16rpx;
+  border-radius: 12rpx;
+  background: rgba(231, 139, 127, .1);
+  border: 1rpx solid rgba(231, 139, 127, .35);
+  color: #EFA59B;
+  font-size: 21rpx;
+  line-height: 1.5;
+}
+.collection-footer { display: block; margin-top: 20rpx; }
+.slim-btn { min-height: 80rpx; padding: 18rpx 24rpx; font-size: 27rpx; }
+.done-footer { display: flex; gap: 16rpx; }
+.done-footer .slim-btn { flex: 1; min-width: 0; }
+.collection-footer-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 18rpx;
+  border-top: 1rpx solid var(--line);
+  color: var(--gold);
+  font-size: 24rpx;
+}
+.asset-poster { position: absolute; inset: 0; width: 100%; height: 100%; }

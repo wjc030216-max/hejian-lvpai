@@ -1,0 +1,77 @@
+<view class="p2 with-action works-page">
+  <view class="nav" style="padding-top:{{layout.navTop}}px;height:{{layout.navHeight}}px;padding-right:{{layout.navRight}}px"><text class="back" bindtap="back">‹</text><text>我的作品</text></view>
+  <view class="page-content">
+    <view class="page-heading"><text class="page-title">珍藏每一段旅程</text></view>
+    <text class="page-intro">定妆照和旅行视频，都在这里</text>
+    <view wx:if="{{error}}" class="notice" bindtap="manualRefresh">{{error}} · 点击重试</view>
+    <view wx:if="{{!items.length}}" class="empty-state">
+      <text>{{loading?'正在读取作品…':'还没有旅行作品'}}</text>
+      <text class="muted">选一款模板，生成你的旅行电影</text>
+      <button class="secondary" bindtap="again">去挑选模板</button>
+    </view>
+
+    <view wx:for="{{items}}" wx:key="project_id" class="collection">
+      <view class="collection-heading">
+        <view class="collection-title-wrap" data-id="{{item.project_id}}" bindtap="open">
+          <text class="section-title">{{item.video_name}}</text><text class="ai-badge">AI 生成</text>
+          <text class="muted">{{item.location_association}} · {{item.timeText}}</text>
+        </view>
+        <text class="status-capsule {{item.statusKind}}">{{item.statusText}}<text wx:if="{{item.unread}}" class="unread">●</text></text>
+      </view>
+      <text wx:if="{{item.participation_mode==='single'}}" class="small-note">一人体验 · 1 位游客＋{{item.template_role_count}} 位模板人物</text>
+
+      <view class="asset-pair">
+        <view class="asset-column">
+          <view class="asset-frame">
+            <view wx:if="{{item.portrait_url}}" class="skeleton {{item.pReady?'hide':''}}"></view>
+            <image show-menu-by-longpress="{{true}}" wx:if="{{item.portrait_url}}" src="{{item.portrait_url}}" mode="aspectFill" data-url="{{item.portrait_url}}" data-kind="image" bindload="imgLoaded" bindtap="preview"/>
+            <view wx:else class="asset-placeholder {{item.statusKind==='working'?'working':''}}" data-id="{{item.project_id}}" bindtap="open">
+              <view wx:if="{{item.statusKind==='working'}}" class="mini-spinner"></view>
+              <text wx:else class="asset-symbol">▧</text>
+              <text>{{item.portraitText}}</text>
+            </view>
+          </view>
+          <text class="asset-title">定妆照</text>
+          <text class="muted">{{item.portraitLabel}}</text>
+          <view wx:if="{{item.portrait_url}}" class="asset-actions">
+            <button class="secondary asset-btn" data-url="{{item.portrait_url}}" data-kind="image" bindtap="save" disabled="{{saving}}">保存照片</button>
+          </view>
+        </view>
+
+        <view class="asset-column">
+          <view class="asset-frame" data-id="{{item.project_id}}" bindtap="open">
+            <view wx:if="{{item.video_url}}" class="skeleton {{item.vReady?'hide':''}}"></view>
+            <block wx:if="{{item.video_url}}">
+              <image wx:if="{{item.video_poster}}" class="asset-poster" src="{{item.video_poster}}" mode="aspectFill" lazy-load="{{true}}"/>
+              <view class="video-play-overlay">▷</view>
+            </block>
+            <view wx:else class="asset-placeholder {{item.statusKind==='working'?'working':''}}">
+              <view wx:if="{{item.statusKind==='working'}}" class="mini-spinner"></view>
+              <text wx:else class="asset-symbol">▷</text>
+              <text>{{item.videoText}}</text>
+            </view>
+          </view>
+          <text class="asset-title">旅行视频</text>
+          <text class="muted">{{item.videoLabel}}</text>
+          <view wx:if="{{item.video_url}}" class="asset-actions">
+            <button class="secondary asset-btn" data-url="{{item.video_url}}" data-kind="video" bindtap="save" disabled="{{saving}}">保存视频</button>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{item.statusKind==='failed'}}" class="fail-note">{{item.error || (item.status==='refund_failed'?'退款未完成，请联系客服。':'本次制作失败，可以重新生成或申请全额退款。')}}</view>
+
+      <view class="collection-footer">
+        <button wx:if="{{item.statusKind==='working' || item.statusKind==='unpaid'}}" class="primary slim-btn" data-id="{{item.project_id}}" bindtap="open">{{item.statusKind==='unpaid'?'继续支付':'查看进度'}}</button>
+        <button wx:elif="{{item.statusKind==='failed'}}" class="primary slim-btn" data-id="{{item.project_id}}" bindtap="open">查看处理</button>
+        <view wx:else class="collection-footer done-footer">
+          <button wx:if="{{item.status!=='refunded' && item.status!=='expired'}}" class="secondary slim-btn" open-type="share" data-id="{{item.project_id}}">分享</button>
+          <button class="primary slim-btn" data-id="{{item.project_id}}" bindtap="open">{{item.status==='refunded'?'查看归档记录':item.status==='expired'?'查看数据记录':'查看完整作品'}}</button>
+        </view>
+      </view>
+    </view>
+
+    <button wx:if="{{nextOffset !== null}}" class="secondary" bindtap="more" loading="{{loading}}">查看更多作品</button>
+  </view>
+  <view class="fixed-action"><button class="primary" bindtap="again">再次拍摄</button></view>
+</view>

@@ -1,0 +1,95 @@
+name: hejian-local
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: hejian_dev
+      MYSQL_USER: hejian_dev
+      MYSQL_PASSWORD: hejian_dev_password
+      MYSQL_ROOT_PASSWORD: hejian_local_root_password
+    ports: ["127.0.0.1:3308:3306"]
+    volumes:
+      - hejian_mysql:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uhejian_dev", "-phejian_dev_password"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes
+    ports: ["127.0.0.1:6381:6379"]
+    volumes: ["hejian_redis:/data"]
+  phase2-api:
+    build:
+      context: ..
+      dockerfile: server/phase2/Dockerfile
+    volumes:
+      - hejian_uploads:/app/local-uploads
+      - hejian_template_assets:/app/template-assets
+    environment:
+      APP_ENV: local
+      PHASE2_AUTH_MODE: local
+      PHASE2_STATE_BACKEND: mysql
+      AITRAVEL_DATABASE_URL: mysql+pymysql://hejian_dev:hejian_dev_password@mysql:3306/hejian_dev?charset=utf8mb4
+      PHASE2_DB_HOST: mysql
+      PHASE2_DB_PORT: 3306
+      PHASE2_DB_NAME: hejian_dev
+      PHASE2_DB_USER: hejian_dev
+      PHASE2_DB_PASSWORD: hejian_dev_password
+      PHASE2_UPLOAD_ROOT: /app/local-uploads
+      PHASE2_STATIC_ROOT: /app/template-assets
+      PHASE2_DEV_PAYMENT_BYPASS: "true"
+      PHASE2_AI_ORCHESTRATION_ENABLED: "false"
+      PUBLIC_BASE_URL: http://127.0.0.1:8090
+      PUBLIC_API_BASE_URL: http://127.0.0.1:8090
+      REDIS_URL: redis://redis:6379/2
+      PORT: 10020
+      FLASK_DEBUG: "false"
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_started}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10020/api/v2/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  template-import:
+    profiles: ["tools"]
+    build:
+      context: ..
+      dockerfile: server/phase2/Dockerfile
+    command:
+      - python
+      - /app/server/admin/batch_import.py
+      - --source
+      - /incoming
+      - --report
+      - /app/reports/hejian-template-import.json
+      - --commit
+    volumes:
+      - ../测试模板:/incoming:ro
+      - ../local-reports:/app/reports
+      - hejian_template_assets:/app/template-assets
+    environment:
+      PYTHONPATH: /app/server
+      APP_ENV: local
+      PHASE2_SKIP_MEDIA_VALIDATION: "true"
+      AITRAVEL_DATABASE_URL: mysql+pymysql://hejian_dev:hejian_dev_password@mysql:3306/hejian_dev?charset=utf8mb4
+      ADMIN_TEMPLATE_ROOT: /app/template-assets/managed
+    depends_on:
+      mysql: {condition: service_healthy}
+  gateway:
+    image: nginx:1.27.5-alpine
+    ports: ["127.0.0.1:8090:8080"]
+    volumes:
+      - ./nginx.hejian-local.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      phase2-api: {condition: service_healthy}
+
+volumes:
+  hejian_mysql:
+  hejian_redis:
+  hejian_uploads:
+  hejian_template_assets:

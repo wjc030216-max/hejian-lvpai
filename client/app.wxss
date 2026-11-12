@@ -1,0 +1,2 @@
+/* Phase-two pages use styles/phase2-v2.wxss. */
+page { width: 100%; min-height: 100%; background: #0D1716; }

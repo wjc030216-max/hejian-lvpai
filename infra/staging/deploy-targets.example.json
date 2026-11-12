@@ -1,0 +1,9 @@
+{
+  "ssh_key": "%USERPROFILE%\\.ssh\\hejian_deploy",
+  "public_api_base_url": "https://api.example.com",
+  "nodes": [
+    { "name": "data", "host": "10.0.0.11", "user": "deploy", "install_path": "/opt/hejian-lvpai", "archive": "phase2-data.tar.gz" },
+    { "name": "main", "host": "10.0.0.12", "user": "deploy", "install_path": "/opt/hejian-lvpai", "archive": "phase2-main.tar.gz" },
+    { "name": "ai", "host": "10.0.0.13", "user": "deploy", "install_path": "/opt/hejian-lvpai", "archive": "phase2-ai.tar.gz" }
+  ]
+}

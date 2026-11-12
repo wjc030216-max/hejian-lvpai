@@ -1,0 +1,148 @@
+<view class="p2 with-action upload-page">
+  <view class="nav" style="padding-top:{{layout.navTop}}px;height:{{layout.navHeight}}px;padding-right:{{layout.navRight}}px"><text class="back" bindtap="back">‹</text><text>上传照片</text></view>
+  <view class="page-content">
+    <view wx:if="{{loading}}" class="empty-state">正在读取所选模板…</view>
+    <view wx:if="{{error}}" class="notice" bindtap="manualRefresh">{{error}} · 点击重试</view>
+    <view wx:if="{{project && !aiEnabled}}" class="notice">AI制作服务未启用，照片可以准备，但当前不能开始制作。</view>
+
+    <block wx:if="{{project}}">
+      <view class="section-head">
+        <text class="section-title">已选模板</text>
+      </view>
+      <view class="template-card card-surface">
+        <view class="template-info">
+          <view class="template-head">
+            <text class="template-name">{{project.template.video_name}}</text>
+            <view class="change-pill" bindtap="back" aria-role="button" aria-label="更换模板">更换</view>
+          </view>
+          <text class="template-meta">满足{{project.template.actor_count}}人 · {{project.template.video_genre}}</text>
+          <text class="template-hook">{{project.template.story_hook}}</text>
+        </view>
+      </view>
+
+      <view wx:if="{{roles.length>1}}" class="mode-section">
+        <view class="section-head">
+          <text class="section-title">选择拍摄模式</text>
+          <text class="section-sub">不同模式，带来不同的拍摄体验</text>
+        </view>
+        <view class="mode-grid">
+          <view class="mode-card {{mode==='multi'?'chosen':''}}" data-mode="multi" bindtap="mode">
+            <view wx:if="{{mode==='multi'}}" class="mode-check"><text class="mode-check-mark">✓</text></view>
+            <view class="mode-illus"><view wx:for="{{multiFigs}}" wx:key="key" class="fig"></view></view>
+            <view class="mode-name-row"><text class="mode-name">多人同框</text><text class="mode-badge">更真实</text></view>
+            <text class="mode-desc">{{multiDesc}}</text>
+          </view>
+          <view class="mode-card {{mode==='single'?'chosen':''}}" data-mode="single" bindtap="mode">
+            <view wx:if="{{mode==='single'}}" class="mode-check"><text class="mode-check-mark">✓</text></view>
+            <view class="mode-illus"><view wx:for="{{singleFigs}}" wx:key="key" class="fig {{item.live?'fig-live':'fig-ghost'}}"></view></view>
+            <view class="mode-name-row"><text class="mode-name">一人体验</text><text class="mode-badge">更轻松</text></view>
+            <text class="mode-desc">{{singleDesc}}</text>
+          </view>
+        </view>
+        <text class="mode-explanation">{{mode==='single'?'成片仍为 '+roles.length+' 人同框，未上传的角色自动使用模板人物。':'切换模式会保留已上传的草稿。'}}</text>
+      </view>
+
+      <view class="section-head">
+        <text class="section-title">上传照片</text>
+        <text class="section-sub">请上传清晰正面照，建议使用近照</text>
+      </view>
+      <view class="role-grid roles-{{roles.length}}">
+        <view wx:for="{{roles}}" wx:key="person_uid" class="role-card">
+          <view class="role-head">
+            <view class="role-icon"><view class="ic ic-user {{item.uses_template?'ghost-icon':''}}"></view></view>
+            <text class="role-name">{{item.display_name || (solo?'主角':'角色'+(index+1))}}</text>
+            <text wx:if="{{solo}}" class="role-tag">主角</text>
+            <text wx:elif="{{mode==='single' && !item.uses_template}}" class="role-tag chosen">你扮演</text>
+            <text wx:elif="{{mode==='single' && item.uses_template}}" class="role-tag switch" data-uid="{{item.person_uid}}" catchtap="switchRole">换成我演</text>
+          </view>
+          <view class="upload-box {{item.photo_url?'has-photo':''}} {{item.uses_template?'uses-template':''}}" data-index="{{index}}" bindtap="choose">
+            <block wx:if="{{item.photo_url}}">
+              <image class="upload-image" src="{{item.photo_url}}" mode="aspectFill"/>
+              <view class="replace-label">{{item.check_status==='rejected'?'重新上传':item.check_status==='checking'?'正在检查':'更换照片'}}</view>
+            </block>
+            <block wx:elif="{{item.uses_template}}">
+              <view class="upload-empty">
+                <view class="ic ic-user ghost-icon"></view>
+                <text class="upload-hint">模板人物</text>
+                <text class="upload-format">点此换成你出演</text>
+              </view>
+            </block>
+            <block wx:else>
+              <view class="upload-empty">
+                <view class="ic ic-plus"></view>
+                <text class="upload-hint">上传照片</text>
+                <text class="upload-format">支持 JPG/PNG 格式</text>
+              </view>
+            </block>
+          </view>
+          <view wx:if="{{!item.uses_template}}" class="face-status {{item.check_status}}">
+            <view class="face-dot"></view>
+            <text>{{item.check_status==='passed'?'检查通过':item.check_status==='checking'?'正在检查人脸':item.check_status==='rejected'?'需要更换照片':'待上传'}}</text>
+          </view>
+          <view wx:if="{{!item.uses_template && item.check_status==='rejected'}}" class="reject-reason">{{item.check_message || '照片未通过检查，请更换一张清晰、无遮挡的单人正脸照'}}</view>
+          <text wx:if="{{item.uses_template}}" class="check-hint">未上传时使用模板人物，成片仍为 {{roles.length}} 人同框</text>
+          <text wx:elif="{{item.check_status==='checking'}}" class="check-hint">{{item.check_message || '正在检查人脸，请稍候'}}</text>
+          <text wx:elif="{{item.check_status==='passed'}}" class="check-hint">照片已就绪</text>
+          <text wx:elif="{{item.check_status!=='rejected'}}" class="check-hint">清晰、无遮挡的单人正脸</text>
+        </view>
+      </view>
+
+      <view wx:if="{{remaining>0}}" class="remaining-bar">
+        <text class="remaining-count">还需要上传 {{remaining}} 张照片</text>
+        <text class="remaining-hint">清晰、无遮挡的单人正脸</text>
+      </view>
+
+      <view class="package-card card-surface">
+        <view class="package-head"><view class="package-icon"><view class="ic ic-film"></view></view><text class="section-title">本次旅拍包含</text></view>
+        <view class="package-items">
+          <view class="package-item">
+            <view class="asset-icon"><view class="ic ic-photo"></view></view>
+            <view class="package-text"><text class="package-name">1 张定妆照</text><text class="package-desc">高清 · 无水印</text></view>
+          </view>
+          <text class="package-plus">+</text>
+          <view class="package-item">
+            <view class="asset-icon"><view class="ic ic-video"></view></view>
+            <view class="package-text"><text class="package-name">1 段竖屏视频</text><text class="package-desc">约 {{videoSpecification}} · 竖屏高清</text></view>
+          </view>
+        </view>
+      </view>
+
+      <view class="ai-notice"><view class="ai-dot"></view><text>本作品由 AI 生成（人工智能合成内容），仅用于个人纪念与分享</text></view>
+
+      <view class="pay-card card-surface">
+        <view class="pay-main">
+          <text class="pay-label">模板标准价</text>
+          <view class="pay-value">
+            <text class="pay-amount">{{payAmount}}</text>
+            <text wx:if="{{payOriginal}}" class="pay-original">{{payOriginal}}</text>
+          </view>
+          <view wx:if="{{freeActive}}" class="pay-quota"><text class="pay-quota-dot"></text><text>今日体验名额 剩 {{freeRemaining}} / {{freeTotal}}</text></view>
+        </view>
+        <view class="pay-secure"><view class="ic ic-shield"></view><text>{{payNote}}</text></view>
+      </view>
+
+      <view class="consent-card card-surface">
+        <view class="consent-main" bindtap="consent">
+          <text class="check {{consent?'checked':''}}">{{consent?'✓':''}}</text>
+          <text class="consent-text">我已阅读并同意<text class="gold" catchtap="details">《照片授权与制作说明》</text></text>
+        </view>
+        <view class="consent-tags">
+          <view class="consent-tag"><view class="ic ic-lock"></view><text>仅用于本次旅拍制作</text></view>
+          <view class="consent-tag"><view class="ic ic-eye"></view><text>不作其他用途</text></view>
+          <view class="consent-tag"><view class="ic ic-shield"></view><text>保护您的隐私</text></view>
+        </view>
+      </view>
+    </block>
+  </view>
+
+  <view class="fixed-action upload-action">
+    <button class="primary" loading="{{submitting}}" disabled="{{!aiEnabled || uploading || submitting || savingMode || config.payment_enabled===false || !config.payment_mode || config.payment_mode==='unconfigured' || remaining>0 || checking || rejected || !all}}" bindtap="next">{{config.payment_enabled===false ? '支付暂未开放' : !aiEnabled ? 'AI制作服务未启用' : remaining>0 ? '请先上传 '+remaining+' 张照片' : checking ? '正在检查人脸…' : rejected ? '请更换未通过的照片' : all ? (config.payment_mode==='dev-bypass'?'开始制作 · 测试不扣款':freeActive?'免费体验 · 今日限'+freeTotal+'名':'立即支付 · 开始制作') : '请等待照片检查通过'}}</button>
+    <view class="action-checklist">
+      <view class="check-item {{mode?'on':''}}"><view class="ic ic-check"></view><text>已选模式</text></view>
+      <text class="check-divider">|</text>
+      <view class="check-item {{photoCount?'on':''}}"><view class="ic ic-check"></view><text>已上传照片（{{photoCount}}张）</text></view>
+      <text class="check-divider">|</text>
+      <view class="check-item {{consent?'on':''}}"><view class="ic ic-check"></view><text>已授权</text></view>
+    </view>
+  </view>
+</view>

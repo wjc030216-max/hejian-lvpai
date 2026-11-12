@@ -1,0 +1,168 @@
+services:
+  phase2-api:
+    env_file:
+      - path: ../../allinpay.env
+        required: false
+    build:
+      context: ../..
+      dockerfile: server/staging/Dockerfile-main
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-staging}
+      TZ: Asia/Shanghai
+      BUILD_REVISION: ${BUILD_REVISION:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-unknown}
+      PHASE2_AUTH_MODE: wechat
+      PHASE2_STATE_BACKEND: mysql
+      AITRAVEL_DATABASE_URL: ${AITRAVEL_DATABASE_URL}
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET}
+      WECHAT_APP_ID: ${WECHAT_APP_ID}
+      WECHAT_APP_SECRET: ${WECHAT_APP_SECRET}
+      WECHAT_SUBSCRIBE_TEMPLATE_ID: ${WECHAT_SUBSCRIBE_TEMPLATE_ID:-}
+      WECHAT_SUBSCRIBE_MINIPROGRAM_STATE: ${WECHAT_SUBSCRIBE_MINIPROGRAM_STATE:-}
+      PHASE2_DB_HOST: ${DATA_PRIVATE_IP:-10.0.0.11}
+      PHASE2_DB_PORT: 13306
+      PHASE2_DB_NAME: ${PHASE2_DB_NAME}
+      PHASE2_DB_USER: ${PHASE2_DB_USER}
+      PHASE2_DB_PASSWORD: ${PHASE2_DB_PASSWORD}
+      PHASE2_UPLOAD_ROOT: /var/lib/hejian-lvpai/uploads
+      PHASE2_STATIC_ROOT: /app/client/assets
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL}
+      PHASE2_TEMPLATE_PREVIEW_VERSION: ${PHASE2_TEMPLATE_PREVIEW_VERSION:-720p-20261104}
+      PHASE2_MEDIA_DIRECT: ${PHASE2_MEDIA_DIRECT:-false}
+      PHASE2_MEDIA_REDIRECT: ${PHASE2_MEDIA_REDIRECT:-false}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      PHASE2_PAYMENT_MODE: ${PHASE2_PAYMENT_MODE:-dev-bypass}
+      WECHAT_PAY_APPID: ${WECHAT_PAY_APPID}
+      WECHAT_PAY_MCHID: ${WECHAT_PAY_MCHID}
+      WECHAT_PAY_APIV3_KEY: ${WECHAT_PAY_APIV3_KEY}
+      WECHAT_PAY_CERT_SERIAL_NO: ${WECHAT_PAY_CERT_SERIAL_NO}
+      WECHAT_PAY_PLATFORM_CERT_SERIAL_NO: ${WECHAT_PAY_PLATFORM_CERT_SERIAL_NO:-}
+      WECHAT_PAY_PRIVATE_KEY_PATH: ${WECHAT_PAY_PRIVATE_KEY_PATH:-/app/server/phase2/cert/apiclient_key.pem}
+      WECHAT_PAY_CERT_PATH: ${WECHAT_PAY_CERT_PATH:-/app/server/phase2/cert/apiclient_cert.pem}
+      WECHAT_PAY_PLATFORM_PUB_KEY_PATH: ${WECHAT_PAY_PLATFORM_PUB_KEY_PATH:-/app/server/phase2/cert/wechatpay_pub.pem}
+      WECHAT_PAY_NOTIFY_URL: ${WECHAT_PAY_NOTIFY_URL}
+      AITRAVEL_AIVIDEO_PRICE_FEN: ${AITRAVEL_AIVIDEO_PRICE_FEN:-}
+      PHASE2_FREE_QUOTA_TOTAL: ${PHASE2_FREE_QUOTA_TOTAL:-0}
+      PHASE2_AGREEMENT_VERSION: ${PHASE2_AGREEMENT_VERSION:-travel-photo-v1}
+      PHASE2_CORS_ORIGINS: ${PHASE2_CORS_ORIGINS:-}
+      PHASE2_PROJECTS_PER_HOUR: ${PHASE2_PROJECTS_PER_HOUR:-30}
+      PHASE2_UPLOADS_PER_10_MINUTES: ${PHASE2_UPLOADS_PER_10_MINUTES:-30}
+      PHASE2_SUBSCRIBE_MAX_ATTEMPTS: ${PHASE2_SUBSCRIBE_MAX_ATTEMPTS:-8}
+      PHASE2_USER_RETENTION_DAYS: ${PHASE2_USER_RETENTION_DAYS:-90}
+      PHASE2_AI_ORCHESTRATION_ENABLED: 'true'
+      PHASE2_ORCHESTRATOR_WORKERS: ${PHASE2_ORCHESTRATOR_WORKERS:-128}
+      PHASE2_PROJECT_DB_POOL_SIZE: ${PHASE2_PROJECT_DB_POOL_SIZE:-32}
+      PHASE2_PROJECT_DB_MAX_OVERFLOW: ${PHASE2_PROJECT_DB_MAX_OVERFLOW:-16}
+      PHASE2_TASK_MAX_SECONDS: ${PHASE2_TASK_MAX_SECONDS:-7200}
+      PHASE2_PROJECT_MAX_SECONDS: ${PHASE2_PROJECT_MAX_SECONDS:-7200}
+      PHASE2_RETENTION_BATCH_SIZE: ${PHASE2_RETENTION_BATCH_SIZE:-100}
+      PHASE2_RETENTION_INTERVAL_SECONDS: ${PHASE2_RETENTION_INTERVAL_SECONDS:-300}
+      PHASE2_RETENTION_TIME_BUDGET_SECONDS: ${PHASE2_RETENTION_TIME_BUDGET_SECONDS:-240}
+      SERVICE_THREADS: ${SERVICE_THREADS:-64}
+      LOCAL_CLOUD_ENABLED: ${LOCAL_CLOUD_ENABLED:-false}
+      PHASE2_LOG_SERVICE: phase2-api
+      LOG_COLLECTOR_URL: http://${MAIN_PRIVATE_IP:-10.0.0.12}:18031/api/v1/logs/ingest
+      REDIS_URL: ${REDIS_URL}
+      PERSONATTR_SERVICE_URL: http://${AI_PRIVATE_IP:-10.0.0.13}:18002
+      CHARACTERGEN_SERVICE_URL: http://${AI_PRIVATE_IP:-10.0.0.13}:18005
+      SEEDDANCE_SERVICE_URL: http://${AI_PRIVATE_IP:-10.0.0.13}:18006
+      FILE_SERVICE_URL: http://${DATA_PRIVATE_IP:-10.0.0.11}:18004
+      TOS_SERVICE_URL: http://${DATA_PRIVATE_IP:-10.0.0.11}:18012
+      LOCAL_MEDIA_TOKEN: ${LOCAL_MEDIA_TOKEN:?Fill media installation token}
+    ports:
+    - ${MAIN_PRIVATE_IP:-10.0.0.12}:18020:10020
+    volumes:
+    - phase2_api_uploads:/var/lib/hejian-lvpai/uploads
+    - ${WECHAT_PAY_CERT_DIR:-./certs}:/app/server/phase2/cert:ro
+    - /opt/hejian-lvpai/node-logs/main:/var/lib/hejian-lvpai/service-logs
+    command:
+    - python
+    - /app/server/phase2/phase2_app.py
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:10020/api/v2/health')
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    stop_grace_period: 60s
+  logcollector:
+    build:
+      context: ../..
+      dockerfile: server/staging/Dockerfile-main
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-staging}
+      TZ: Asia/Shanghai
+      BUILD_REVISION: ${BUILD_REVISION:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-unknown}
+      PORT: '10031'
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET}
+      AITRAVEL_DATABASE_URL: ${AITRAVEL_DATABASE_URL}
+      LOG_ROOT: /var/lib/hejian-lvpai/logs
+      PHASE2_LOG_RETENTION_SECONDS: ${PHASE2_LOG_RETENTION_SECONDS:-0}
+    ports:
+    - ${MAIN_PRIVATE_IP:-10.0.0.12}:18031:10031
+    volumes:
+    - /opt/hejian-lvpai/logs:/var/lib/hejian-lvpai/logs
+    command:
+    - python
+    - /app/server/logcollector/logcollector_app.py
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:10031/health')
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    stop_grace_period: 30s
+  gateway:
+    image: nginx:1.27.5-alpine
+    restart: unless-stopped
+    depends_on:
+      phase2-api:
+        condition: service_healthy
+    ports:
+    - 80:80
+    - 443:443
+    volumes:
+    - ./nginx.staging.conf.template:/etc/nginx/templates/default.conf.template:ro
+    - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    - /opt/hejian-lvpai/tls:/etc/nginx/tls:ro
+    - /opt/hejian-lvpai/certbot-webroot:/var/www/certbot
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    stop_grace_period: 60s
+    environment:
+      TEST_DOMAIN: ${TEST_DOMAIN:?Fill test HTTPS hostname}
+      LOCAL_MEDIA_TOKEN: ${LOCAL_MEDIA_TOKEN:?Fill media installation token}
+      DATA_PRIVATE_IP: ${DATA_PRIVATE_IP:-10.0.0.11}
+volumes:
+  phase2_api_uploads: null
+name: ${COMPOSE_PROJECT_NAME:-hejian-lvpai-test-main}

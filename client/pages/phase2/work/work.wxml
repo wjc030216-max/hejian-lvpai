@@ -1,0 +1,213 @@
+<view class="p2 with-action work-page">
+  <view class="nav" style="padding-top:{{layout.navTop}}px;height:{{layout.navHeight}}px;padding-right:{{layout.navRight}}px">
+    <text class="back" bindtap="back">‹</text>
+    <text>本次作品</text>
+    <text class="nav-link" bindtap="goWorks">全部作品 ›</text>
+  </view>
+
+  <view class="page-content">
+    <view wx:if="{{error}}" class="notice" bindtap="manualRefresh">{{error}} · 点击重试</view>
+    <view wx:if="{{loading && !project}}" class="empty-state">正在读取作品…</view>
+
+    <block wx:if="{{project}}">
+      <view class="work-hero">
+        <text class="work-title">{{project.statusText || '我的旅行电影'}}</text><text class="ai-badge">AI 生成</text>
+        <text class="work-name">{{(project.template && project.template.video_name) || '我的旅行电影'}}</text>
+        <view class="work-meta">
+          <text wx:if="{{project.template && project.template.location_association}}">{{project.template.location_association}}</text>
+          <text wx:if="{{project.template && project.template.location_association && project.timeText}}" class="meta-dot">·</text>
+          <text wx:if="{{project.timeText}}">{{project.timeText}}</text>
+        </view>
+      </view>
+
+      <view class="film-steps">
+        <view wx:for="{{project.steps}}" wx:key="label" class="film-step {{item.done?'done':''}} {{item.active?'active':''}} {{item.failed?'failed':''}}">
+          <view class="film-node">
+            <view wx:if="{{item.icon==='check'}}" class="ic ic-check"></view>
+            <view wx:elif="{{item.icon==='photo'}}" class="ic ic-photo"></view>
+            <view wx:elif="{{item.icon==='sparkle'}}" class="ic ic-sparkle-teal"></view>
+            <view wx:elif="{{item.icon==='play'}}" class="ic ic-play"></view>
+            <view wx:else class="step-dot"></view>
+          </view>
+          <text class="step-label">{{item.label}}</text>
+          <text class="step-sub">{{item.sub}}</text>
+        </view>
+      </view>
+
+      <view class="asset-cards">
+        <view class="asset-card">
+          <view class="asset-media">
+            <image show-menu-by-longpress="{{true}}" wx:if="{{project.portrait_url}}" class="asset-media-inner" src="{{project.portrait_url}}" mode="aspectFill" bindtap="preview" binderror="mediaFailed"/>
+            <image wx:elif="{{project.roles && project.roles[0] && project.roles[0].photo_url}}" class="asset-media-inner asset-photo" src="{{project.roles[0].photo_url}}" mode="aspectFill"/>
+            <view wx:else class="card-illus portrait-illus">
+              <view class="illus-card illus-back"></view>
+              <view class="illus-card illus-front"><view class="illus-head"></view><view class="illus-body"></view></view>
+              <text class="illus-spark">✦</text>
+            </view>
+            <view wx:if="{{project.portraitOverlay}}" class="asset-overlay">
+              <text class="asset-overlay-mark">{{project.statusKind==='failed'?'!':'✦'}}</text>
+              <text>{{project.portraitOverlay}}</text>
+            </view>
+          </view>
+          <view class="asset-caption">
+            <view class="asset-caption-copy">
+              <text class="asset-name">定妆照</text>
+              <text class="asset-status">{{project.portraitCardText}}</text>
+            </view>
+            <view wx:if="{{project.portrait_url}}" class="asset-save {{saving?'disabled':''}}" data-kind="image" bindtap="save" aria-role="button" aria-label="保存定妆照">保存照片</view>
+          </view>
+        </view>
+
+        <view class="asset-card">
+          <view class="asset-media video-media">
+            <video wx:if="{{project.video_url}}" class="asset-media-inner" src="{{project.video_url}}" object-fit="cover" direction="0" controls binderror="mediaFailed"/>
+            <block wx:else>
+              <view class="card-illus video-illus">
+                <view class="illus-clapper"></view>
+                <view class="illus-screen"><view class="illus-mountain"></view><view class="illus-play"></view></view>
+                <text class="illus-spark">✦</text>
+              </view>
+              <view class="media-tint"></view>
+              <view class="asset-play"><view></view></view>
+            </block>
+            <view wx:if="{{project.videoOverlay}}" class="asset-overlay">
+              <text class="asset-overlay-mark">{{project.statusKind==='failed'?'!':'◷'}}</text>
+              <text>{{project.videoOverlay}}</text>
+            </view>
+          </view>
+          <view class="asset-caption">
+            <view class="asset-caption-copy">
+              <text class="asset-name">旅行视频</text>
+              <text class="asset-status">{{project.videoCardText}}</text>
+            </view>
+            <view wx:if="{{project.video_url}}" class="asset-save {{saving?'disabled':''}}" data-kind="video" bindtap="save" aria-role="button" aria-label="保存旅行视频">保存视频</view>
+          </view>
+        </view>
+      </view>
+
+      <view class="progress-card {{project.statusKind}}">
+        <view class="progress-main">
+          <view class="progress-icon">
+            <view wx:if="{{project.statusKind==='working'}}" class="ic ic-clock"></view>
+            <text wx:elif="{{project.statusKind==='done' || project.statusKind==='archived'}}">✓</text>
+            <text wx:elif="{{project.statusKind==='unpaid'}}">¥</text>
+            <text wx:else>!</text>
+          </view>
+          <view class="progress-copy">
+            <text class="progress-title">{{project.focusTitle}}</text>
+            <text class="progress-eta">{{project.focusEta}}</text>
+            <text class="progress-desc">{{project.focusDesc}}</text>
+          </view>
+        </view>
+        <view class="progress-bar-row">
+          <view class="progress-bar"><view style="width:{{project.progress || 0}}%"></view></view>
+          <text class="progress-pct">{{project.progressLabel}}</text>
+        </view>
+      </view>
+
+      <view wx:if="{{project.generating}}" class="leave-card" bindtap="goWorks">
+        <view class="leave-icon"><view class="ic ic-bulb"></view></view>
+        <view class="leave-copy">
+          <text class="leave-title">您可以离开页面</text>
+          <text class="leave-desc">完成后会在「我的作品」中提醒您</text>
+        </view>
+        <view class="leave-arrow">›</view>
+      </view>
+    </block>
+  </view>
+
+  <view wx:if="{{project}}" class="fixed-action work-fixed">
+    <view class="work-action-row">
+      <block wx:if="{{project.status==='terminated'}}">
+        <button class="action-secondary" bindtap="confirmRefund" disabled="{{saving}}">
+          <view class="action-copy">
+            <text class="action-title">{{project.payment_mode==='dev-bypass'||project.payment_mode==='free'?'取消制作':'申请退款'}}</text>
+            <text class="action-sub">全额原路退回</text>
+          </view>
+        </button>
+        <button class="action-primary" bindtap="retry" disabled="{{saving || project.ai_enabled===false}}">
+          <view class="action-copy">
+            <text class="action-title">{{project.ai_enabled===false?'AI服务未启用':'重新生成'}}</text>
+            <text class="action-sub">{{project.ai_enabled===false?'启动服务后再重试':'保留当前照片'}}</text>
+          </view>
+        </button>
+      </block>
+      <block wx:elif="{{project.status==='refund_pending' || project.status==='refund_failed'}}">
+        <button class="action-secondary" bindtap="goWorks">
+          <view class="action-copy">
+            <text class="action-title">返回作品</text>
+            <text class="action-sub">查看退款状态</text>
+          </view>
+        </button>
+        <button class="action-primary" open-type="contact">
+          <view class="action-copy">
+            <text class="action-title">联系客服</text>
+            <text class="action-sub">核对退款进度</text>
+          </view>
+        </button>
+      </block>
+      <block wx:elif="{{project.status==='pending_payment'}}">
+        <button class="action-secondary" bindtap="goWorks">
+          <view class="action-copy">
+            <text class="action-title">稍后支付</text>
+            <text class="action-sub">返回作品列表</text>
+          </view>
+        </button>
+        <button class="action-primary" bindtap="pay" loading="{{paying}}" disabled="{{paying || config.payment_enabled===false}}">
+          <view class="action-copy">
+            <text class="action-title">{{config.payment_enabled===false?'支付暂未开放':'继续支付'}}</text>
+            <text class="action-sub">{{config.payment_enabled===false?'当前无法创建或继续支付':'支付后开始制作'}}</text>
+          </view>
+        </button>
+      </block>
+      <block wx:elif="{{project.status==='completed' || project.status==='archived'}}">
+        <button class="action-secondary" open-type="share">
+          <view class="action-copy">
+            <text class="action-title">分享作品</text>
+            <text class="action-sub">发给家人朋友</text>
+          </view>
+        </button>
+        <button class="action-primary" bindtap="again">
+          <view class="action-copy">
+            <text class="action-title">再次拍摄</text>
+            <text class="action-sub">重新选择模板</text>
+          </view>
+        </button>
+      </block>
+      <block wx:elif="{{project.status==='refunded' || project.status==='expired'}}">
+        <button class="action-secondary" bindtap="goWorks">
+          <view class="action-copy">
+            <text class="action-title">返回作品</text>
+            <text class="action-sub">查看历史记录</text>
+          </view>
+        </button>
+        <button class="action-primary" bindtap="again">
+          <view class="action-copy">
+            <text class="action-title">再次拍摄</text>
+            <text class="action-sub">重新选择模板</text>
+          </view>
+        </button>
+      </block>
+      <block wx:else>
+        <button class="action-secondary help-action" open-type="contact">
+          <view class="action-alert">!</view>
+          <view class="action-copy">
+            <text class="action-title">遇到问题？</text>
+            <text class="action-sub">失败 / 超时 / 联系客服</text>
+          </view>
+        </button>
+        <button class="action-primary camera-action" bindtap="again">
+          <view class="ic ic-photo action-cam-icon"></view>
+          <view class="action-copy">
+            <text class="action-title">再次拍摄</text>
+            <text class="action-sub">重新选择模板</text>
+          </view>
+        </button>
+      </block>
+    </view>
+  </view>
+
+  <view wx:if="{{showConfetti}}" class="celebration">
+    <view wx:for="{{confetti}}" wx:key="id" class="confetti-piece" style="left:{{item.x}}%; animation-delay:{{item.delay}}s; animation-duration:{{item.dur}}s; background:{{item.color}}; width:{{item.w}}rpx; height:{{item.w}}rpx;"></view>
+  </view>
+</view>

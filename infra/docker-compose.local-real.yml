@@ -1,0 +1,406 @@
+name: ${HEJIAN_LOCAL_REAL_NAME:-aitravel-local-real}
+services:
+  mysql:
+    image: mysql:8.4
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max-connections=256
+    environment:
+      APP_ENV: local-real
+      MYSQL_DATABASE: aitravel_dev
+      MYSQL_USER: aitravel_dev
+      MYSQL_PASSWORD: aitravel_dev_password
+      MYSQL_ROOT_PASSWORD: local_root_password
+    ports: ["127.0.0.1:${HEJIAN_MYSQL_PORT:-3307}:3306"]
+    volumes:
+      - aitravel_mysql_real:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uaitravel_dev", "-paitravel_dev_password"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes
+    ports: ["127.0.0.1:${HEJIAN_REDIS_PORT:-6380}:6379"]
+    volumes: ["aitravel_redis_real:/data"]
+  file:
+    image: aitravel-local-real-file:latest
+    build:
+      context: ..
+      dockerfile: server/local/Dockerfile
+    command: python /app/server/file/file_app.py
+    environment:
+      APP_ENV: local-real
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET:?Run start-local-real.ps1 -Init first}
+      UPLOAD_ROOT: /home/aitravel/file/data
+      PHASE2_LOG_SERVICE: file
+      LOG_COLLECTOR_URL: http://logcollector:10031/api/v1/logs/ingest
+      TOS_SERVICE_URL: http://tos-storage:10012
+    volumes:
+      - ../server:/app/server:ro
+      - aitravel_file_real:/home/aitravel/file/data
+      - hejian_service_logs_real:/var/lib/hejian-lvpai/service-logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10004/api/v1/file/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  seedream:
+    image: aitravel-local-real-seedream:latest
+    build:
+      context: ..
+      dockerfile: server/local/Dockerfile
+    command: python /app/server/ai2pic/seedream_app.py
+    environment:
+      APP_ENV: local-real
+      PHASE2_DURABLE_TASKS: "true"
+      PHASE2_AUTH_MODE: ${PHASE2_AUTH_MODE:-local}
+      AITRAVEL_DATABASE_URL: mysql+pymysql://aitravel_dev:aitravel_dev_password@mysql:3306/aitravel_dev?charset=utf8mb4
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET:?Run start-local-real.ps1 -Init first}
+      PORT: 10008
+      SEEDREAM_API_KEY: ${SEEDREAM_API_KEY:-}
+      SEEDREAM_MODEL: doubao-seedream-5-0-pro-260628
+      SEEDREAM_MIN_SIZE: 1K
+      SEEDREAM_API_URL: https://ark.cn-beijing.volces.com/api/v3/images/generations
+      LOCAL_CLOUD_ENABLED: ${LOCAL_CLOUD_ENABLED:-false}
+      FILE_SERVICE_URL: http://file:10004
+      TOS_SERVICE_URL: http://tos-storage:10012
+      PUBLIC_API_BASE_URL: ${LOCAL_PUBLIC_BASE_URL}/media/${LOCAL_MEDIA_TOKEN}
+      EXTERNAL_DOMAIN: ${LOCAL_PUBLIC_BASE_URL:?Set HTTPS media tunnel URL}/media/${LOCAL_MEDIA_TOKEN:?Run start-local-real.ps1 -Init first}
+      PHASE2_LOG_SERVICE: seedream
+      LOG_COLLECTOR_URL: http://logcollector:10031/api/v1/logs/ingest
+    depends_on:
+      mysql: {condition: service_healthy}
+      file: {condition: service_healthy}
+    volumes:
+      - ../server:/app/server:ro
+      - hejian_service_logs_real:/var/lib/hejian-lvpai/service-logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10008/api/v1/images/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+  personattr:
+    image: aitravel-local-real-personattr:latest
+    build:
+      context: ..
+      dockerfile: server/local/Dockerfile
+    command: python /app/server/personattr/personattr_app.py
+    environment:
+      APP_ENV: local-real
+      PORT: 10002
+      ALIBABA_CLOUD_ACCESS_KEY_ID: ${ALIBABA_CLOUD_ACCESS_KEY_ID:-}
+      ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${ALIBABA_CLOUD_ACCESS_KEY_SECRET:-}
+      ALIBABA_CLOUD_SECURITY_TOKEN: ${ALIBABA_CLOUD_SECURITY_TOKEN:-}
+      ALIYUN_FACE_ENDPOINT: facebody.cn-shanghai.aliyuncs.com
+      ALIYUN_FACE_REGION: cn-shanghai
+      LOCAL_CLOUD_ENABLED: ${LOCAL_CLOUD_ENABLED:-false}
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET:?Run start-local-real.ps1 -Init first}
+      AITRAVEL_DATABASE_URL: mysql+pymysql://aitravel_dev:aitravel_dev_password@mysql:3306/aitravel_dev?charset=utf8mb4
+      FILE_SERVICE_URL: http://file:10004
+      EXTERNAL_DOMAIN: ${LOCAL_PUBLIC_BASE_URL:?Set HTTPS media tunnel URL}/media/${LOCAL_MEDIA_TOKEN:?Run start-local-real.ps1 -Init first}
+      PHASE2_LOG_SERVICE: face
+      LOG_COLLECTOR_URL: http://logcollector:10031/api/v1/logs/ingest
+    depends_on:
+      mysql: {condition: service_healthy}
+      file: {condition: service_healthy}
+    volumes:
+      - ../server:/app/server:ro
+      - hejian_service_logs_real:/var/lib/hejian-lvpai/service-logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10002/api/v1/personattr/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  charactergen:
+    image: aitravel-local-real-charactergen:latest
+    build:
+      context: ..
+      dockerfile: server/local/Dockerfile
+    command: python /app/server/charactergen/charactergen_app.py
+    environment:
+      APP_ENV: local-real
+      PHASE2_DURABLE_TASKS: "true"
+      PHASE2_AUTH_MODE: ${PHASE2_AUTH_MODE:-local}
+      AITRAVEL_DATABASE_URL: mysql+pymysql://aitravel_dev:aitravel_dev_password@mysql:3306/aitravel_dev?charset=utf8mb4
+      LOCAL_CLOUD_ENABLED: ${LOCAL_CLOUD_ENABLED:-false}
+      PORT: 10005
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET:?Run start-local-real.ps1 -Init first}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 3
+      FILE_SERVICE_URL: http://file:10004
+      EXTERNAL_DOMAIN: ${LOCAL_PUBLIC_BASE_URL:?Set HTTPS media tunnel URL}/media/${LOCAL_MEDIA_TOKEN:?Run start-local-real.ps1 -Init first}
+      IMAGE_SERVICE_URL: http://seedream:10008
+      PHASE2_TEMPLATE_API_URL: http://phase2-api:10020/api/v2/templates
+      PHASE2_LOG_SERVICE: charactergen
+      LOG_COLLECTOR_URL: http://logcollector:10031/api/v1/logs/ingest
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_started}
+      file: {condition: service_healthy}
+      seedream: {condition: service_healthy}
+    volumes:
+      - ../server:/app/server:ro
+      - hejian_service_logs_real:/var/lib/hejian-lvpai/service-logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10005/api/v1/image/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  seeddance-video:
+    image: aitravel-local-real-seeddance-video:latest
+    build:
+      context: ..
+      dockerfile: server/local/Dockerfile
+    command: python /app/server/aitask/seeddance_video_app.py
+    volumes:
+      - ../server:/app/server:ro
+      - aitravel_file_real:/home/aitravel/file/data
+      - hejian_service_logs_real:/var/lib/hejian-lvpai/service-logs
+    environment:
+      APP_ENV: local-real
+      PHASE2_DURABLE_TASKS: "true"
+      PHASE2_AUTH_MODE: ${PHASE2_AUTH_MODE:-local}
+      PORT: 10006
+      BIND_HOST: 0.0.0.0
+      SEEDANCE_API_KEY: ${SEEDANCE_API_KEY:-}
+      SEEDANCE_ASSET_ACCESS_KEY_ID: ${SEEDANCE_ASSET_ACCESS_KEY_ID:-}
+      SEEDANCE_ASSET_ACCESS_KEY_SECRET: ${SEEDANCE_ASSET_ACCESS_KEY_SECRET:-}
+      SEEDANCE_ASSET_GROUP_ID: ${SEEDANCE_ASSET_GROUP_ID:-}
+      SEEDANCE_ASSET_PROJECT_NAME: ${SEEDANCE_ASSET_PROJECT_NAME:-default}
+      SEEDANCE_MODEL: ${SEEDANCE_MODEL:-doubao-seedance-2-0-fast-260128}
+      LOCAL_RESULT_STORAGE: tos
+      TOS_SERVICE_URL: http://tos-storage:10012
+      LOCAL_RESULT_ROOT: /home/aitravel/file/data
+      LOCAL_CLOUD_ENABLED: ${LOCAL_CLOUD_ENABLED:-false}
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET:?Run start-local-real.ps1 -Init first}
+      AITRAVEL_DATABASE_URL: mysql+pymysql://aitravel_dev:aitravel_dev_password@mysql:3306/aitravel_dev?charset=utf8mb4
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_DB: 3
+      FILE_SERVICE_URL: http://file:10004
+      EXTERNAL_DOMAIN: ${LOCAL_PUBLIC_BASE_URL:?Set HTTPS media tunnel URL}/media/${LOCAL_MEDIA_TOKEN:?Run start-local-real.ps1 -Init first}
+      PUBLIC_API_BASE_URL: http://127.0.0.1:${HEJIAN_GATEWAY_PORT:-8080}
+      PHASE2_TEMPLATE_API_URL: http://phase2-api:10020/api/v2/templates
+      LOCAL_INTERNAL_MEDIA_BASE: http://gateway:8081
+      PHASE2_VIDEO_MAX_INFLIGHT: ${PHASE2_VIDEO_MAX_INFLIGHT:-40}
+      PHASE2_LOG_SERVICE: video
+      LOG_COLLECTOR_URL: http://logcollector:10031/api/v1/logs/ingest
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_started}
+      file: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10006/api/v1/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  tos-storage:
+    image: aitravel-local-real-tos-storage:latest
+    build:
+      context: ..
+      dockerfile: server/local/Dockerfile.tos
+    environment:
+      APP_ENV: local-real
+      LOCAL_CLOUD_ENABLED: ${LOCAL_CLOUD_ENABLED:-false}
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET:?Run start-local-real.ps1 -Init first}
+      TOS_ACCESS_KEY_ID: ${TOS_ACCESS_KEY_ID:-}
+      TOS_ACCESS_KEY_SECRET: ${TOS_ACCESS_KEY_SECRET:-}
+      TOS_SECURITY_TOKEN: ${TOS_SECURITY_TOKEN:-}
+      TOS_BUCKET: ${TOS_BUCKET:-}
+      TOS_REGION: ${TOS_REGION:-cn-beijing}
+      TOS_ENDPOINT: ${TOS_ENDPOINT:-https://tos-cn-beijing.volces.com}
+      TOS_KEY_PREFIX: ${TOS_KEY_PREFIX:-local-real/}
+      TOS_SIGNED_URL_TTL_SECONDS: 3600
+      TOS_RECORDS_ROOT: /app/tos-records
+      TOS_OBJECT_RETENTION_DAYS: ${TOS_OBJECT_RETENTION_DAYS:-90}
+      TOS_OBJECT_CLEANUP_INTERVAL_SECONDS: ${TOS_OBJECT_CLEANUP_INTERVAL_SECONDS:-3600}
+      AITRAVEL_DATABASE_URL: mysql+pymysql://aitravel_dev:aitravel_dev_password@mysql:3306/aitravel_dev?charset=utf8mb4
+      PHASE2_LOG_SERVICE: tos
+      LOG_COLLECTOR_URL: http://logcollector:10031/api/v1/logs/ingest
+    depends_on:
+      mysql: {condition: service_healthy}
+    volumes:
+      - aitravel_tos_records_real:/app/tos-records
+      - hejian_service_logs_real:/var/lib/hejian-lvpai/service-logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10012/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  phase2-api:
+    image: hejian-local-phase2-api:latest
+    build:
+      context: ..
+      dockerfile: server/phase2/Dockerfile
+    volumes:
+      - ../server:/app/server:ro
+      - ../client:/app/client:ro
+      - aitravel_uploads_real:/app/local-uploads
+      - aitravel_templates_real:/app/template-assets
+      - hejian_service_logs_real:/var/lib/hejian-lvpai/service-logs
+    environment:
+      APP_ENV: local-real
+      TZ: Asia/Shanghai
+      PHASE2_DURABLE_TASKS: "true"
+      PHASE2_AUTH_MODE: ${PHASE2_AUTH_MODE:-local}
+      AITRAVEL_DATABASE_URL: mysql+pymysql://aitravel_dev:aitravel_dev_password@mysql:3306/aitravel_dev?charset=utf8mb4
+      PHASE2_STATE_BACKEND: mysql
+      WECHAT_APP_ID: ${WECHAT_APP_ID:-}
+      WECHAT_APP_SECRET: ${WECHAT_APP_SECRET:-}
+      PORT: 10020
+      PHASE2_PAYMENT_MODE: ${PHASE2_PAYMENT_MODE:-dev-bypass}
+      PHASE2_DEV_PAYMENT_BYPASS: "false"
+      TOS_SERVICE_URL: http://tos-storage:10012
+      LOCAL_CLOUD_ENABLED: ${LOCAL_CLOUD_ENABLED:-false}
+      LOCAL_MEDIA_TOKEN: ${LOCAL_MEDIA_TOKEN:?Run start-local-real.ps1 -Init first}
+      PHASE2_UPLOAD_ROOT: /app/local-uploads
+      REDIS_URL: redis://redis:6379/2
+      PHASE2_DB_HOST: mysql
+      PHASE2_DB_PORT: 3306
+      PHASE2_DB_NAME: aitravel_dev
+      PHASE2_DB_USER: aitravel_dev
+      PHASE2_DB_PASSWORD: aitravel_dev_password
+      PUBLIC_BASE_URL: ${LOCAL_PUBLIC_BASE_URL:?Set HTTPS media tunnel URL}/media/${LOCAL_MEDIA_TOKEN:?Run start-local-real.ps1 -Init first}
+      PUBLIC_API_BASE_URL: http://127.0.0.1:${HEJIAN_GATEWAY_PORT:-8080}
+      PHASE2_STATIC_ROOT: /app/template-assets
+      PHASE2_AI_ORCHESTRATION_ENABLED: "true"
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET:?Run start-local-real.ps1 -Init first}
+      PERSONATTR_SERVICE_URL: http://personattr:10002
+      CHARACTERGEN_SERVICE_URL: http://charactergen:10005
+      SEEDDANCE_SERVICE_URL: http://seeddance-video:10006
+      PHASE2_LOG_SERVICE: phase2-api
+      LOG_COLLECTOR_URL: http://logcollector:10031/api/v1/logs/ingest
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_started}
+      personattr: {condition: service_healthy}
+      charactergen: {condition: service_healthy}
+      seeddance-video: {condition: service_healthy}
+      tos-storage: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10020/api/v2/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  admin:
+    image: hejian-local-phase2-api:latest
+    command: python /app/server/admin/admin_app.py
+    env_file:
+      - ../deploy-config/.env.data
+    volumes:
+      - ../server:/app/server:ro
+      - aitravel_templates_real:/app/template-assets
+      - hejian_service_logs_real:/var/lib/hejian-lvpai/service-logs
+    environment:
+      APP_ENV: local-real
+      TZ: Asia/Shanghai
+      PYTHONPATH: /app/server
+      PORT: 10030
+      AITRAVEL_DATABASE_URL: mysql+pymysql://aitravel_dev:aitravel_dev_password@mysql:3306/aitravel_dev?charset=utf8mb4
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET:?Run start-local-real.ps1 -Init first}
+      ADMIN_TEMPLATE_ROOT: /app/template-assets/managed
+      ADMIN_MAIN_URL: http://phase2-api:10020
+      PERSONATTR_SERVICE_URL: http://personattr:10002
+      CHARACTERGEN_SERVICE_URL: http://charactergen:10005
+      SEEDDANCE_SERVICE_URL: http://seeddance-video:10006
+      FILE_SERVICE_URL: http://file:10004
+      TOS_SERVICE_URL: http://tos-storage:10012
+      TOS_BUCKET: ${TOS_BUCKET:-}
+      TOS_REGION: ${TOS_REGION:-cn-beijing}
+      PUBLIC_BASE_URL: ${LOCAL_PUBLIC_BASE_URL:?Set HTTPS media tunnel URL}/media/${LOCAL_MEDIA_TOKEN:?Run start-local-real.ps1 -Init first}
+      PUBLIC_API_BASE_URL: http://127.0.0.1:${HEJIAN_GATEWAY_PORT:-8080}
+      PHASE2_LOG_SERVICE: admin
+      LOG_COLLECTOR_URL: http://logcollector:10031/api/v1/logs/ingest
+    ports:
+      - "127.0.0.1:${HEJIAN_ADMIN_PORT:-10030}:10030"
+    depends_on:
+      mysql: {condition: service_healthy}
+      phase2-api: {condition: service_healthy}
+      personattr: {condition: service_healthy}
+      charactergen: {condition: service_healthy}
+      seeddance-video: {condition: service_healthy}
+      tos-storage: {condition: service_healthy}
+      logcollector: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10030/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  logcollector:
+    image: hejian-local-phase2-api:latest
+    command: python /app/server/logcollector/logcollector_app.py
+    volumes:
+      - ../server:/app/server:ro
+      - aitravel_logs_real:/app/logs
+    environment:
+      APP_ENV: local-real
+      TZ: Asia/Shanghai
+      PYTHONPATH: /app/server
+      PORT: 10031
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET:?Run start-local-real.ps1 -Init first}
+      AITRAVEL_DATABASE_URL: mysql+pymysql://aitravel_dev:aitravel_dev_password@mysql:3306/aitravel_dev?charset=utf8mb4
+      LOG_ROOT: /app/logs
+      PHASE2_LOG_RETENTION_SECONDS: ${PHASE2_LOG_RETENTION_SECONDS:-0}
+    depends_on:
+      mysql: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10031/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  templates-import:
+    profiles: ["tools"]
+    image: hejian-local-phase2-api:latest
+    command:
+      - python
+      - /app/server/admin/batch_import.py
+      - --source
+      - /incoming
+      - --report
+      - /app/reports/hejian-local-real-template-import.json
+      - --commit
+    volumes:
+      - ../测试模板:/incoming:ro
+      - ../local-reports:/app/reports
+      - aitravel_templates_real:/app/template-assets
+    environment:
+      PYTHONPATH: /app/server
+      APP_ENV: local-real
+      PHASE2_SKIP_MEDIA_VALIDATION: "true"
+      AITRAVEL_DATABASE_URL: mysql+pymysql://aitravel_dev:aitravel_dev_password@mysql:3306/aitravel_dev?charset=utf8mb4
+      ADMIN_TEMPLATE_ROOT: /app/template-assets/managed
+    depends_on:
+      mysql: {condition: service_healthy}
+  gateway:
+    image: nginx:1.27.5-alpine
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/api/v2/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    environment:
+      LOCAL_MEDIA_TOKEN: ${LOCAL_MEDIA_TOKEN:?Run start-local-real.ps1 -Init first}
+    ports: ["127.0.0.1:${HEJIAN_GATEWAY_PORT:-8080}:8080", "127.0.0.1:${HEJIAN_MEDIA_PORT:-8081}:8081"]
+    volumes:
+      - ./nginx.local-real.conf:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      phase2-api: {condition: service_healthy}
+      file: {condition: service_healthy}
+      personattr: {condition: service_healthy}
+      charactergen: {condition: service_healthy}
+      seeddance-video: {condition: service_healthy}
+      tos-storage: {condition: service_healthy}
+volumes:
+  aitravel_mysql_real:
+  aitravel_redis_real:
+  aitravel_file_real:
+  aitravel_uploads_real:
+  aitravel_tos_records_real:
+  aitravel_templates_real:
+  aitravel_logs_real:
+  hejian_service_logs_real:

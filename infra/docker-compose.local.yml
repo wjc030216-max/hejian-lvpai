@@ -1,0 +1,55 @@
+name: aitravel-local
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: aitravel_dev
+      MYSQL_USER: aitravel_dev
+      MYSQL_PASSWORD: aitravel_dev_password
+      MYSQL_ROOT_PASSWORD: local_root_password
+    ports: ["127.0.0.1:3307:3306"]
+    volumes:
+      - aitravel_mysql_dev:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uaitravel_dev", "-paitravel_dev_password"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  redis:
+    image: redis:7.4-alpine
+    ports: ["127.0.0.1:6380:6379"]
+    volumes: ["aitravel_redis_dev:/data"]
+  phase2-api:
+    build:
+      context: ..
+      dockerfile: server/phase2/Dockerfile
+    volumes:
+      - aitravel_uploads_dev:/app/local-uploads
+    environment:
+      APP_ENV: local
+      PHASE2_UPLOAD_ROOT: /app/local-uploads
+      PORT: 10020
+      PHASE2_DEV_PAYMENT_BYPASS: "true"
+      REDIS_URL: redis://redis:6379/2
+      PHASE2_DB_HOST: mysql
+      PHASE2_DB_PORT: 3306
+      PHASE2_DB_NAME: aitravel_dev
+      PHASE2_DB_USER: aitravel_dev
+      PHASE2_DB_PASSWORD: aitravel_dev_password
+      PUBLIC_BASE_URL: http://127.0.0.1:8080
+      PHASE2_STATIC_ROOT: /app/client/assets
+      FLASK_DEBUG: "false"
+    depends_on:
+      redis: {condition: service_started}
+      mysql: {condition: service_healthy}
+  gateway:
+    image: nginx:1.27-alpine
+    ports: ["127.0.0.1:8080:8080"]
+    volumes:
+      - ./nginx.local.conf:/etc/nginx/nginx.conf:ro
+    depends_on: [phase2-api]
+volumes:
+  aitravel_mysql_dev:
+  aitravel_redis_dev:
+  aitravel_uploads_dev:

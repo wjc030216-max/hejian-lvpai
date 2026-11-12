@@ -1,0 +1,257 @@
+抽奖数据库历史注释。仅保留此前要求的结构说明，不属于服务代码，不执行。
+
+server/init/disabled_lottery_db.py
+"""停用的抽奖数据库逻辑，仅供留档；没有接口、导入、连接或可执行数据库操作。
+原一期数据库模型、查询和更新以及二期表结构全部保留为注释。
+现有数据库表和记录不删除。旧 SQL 建表说明见 v006_gift.sql。
+"""
+
+# """抽奖服务已移除。以下仅保留已注释的数据库模型与操作，不连接数据库、不注册接口。"""
+# 
+# # # ================= 数据库配置 =================
+# # DATABASE_URL = os.environ.get("AITRAVEL_DATABASE_URL", "")
+# # if not DATABASE_URL:
+# #     logger.warning("⚠️ 未设置 AITRAVEL_DATABASE_URL，使用 fallback 本地配置")
+# #     DATABASE_URL = "[已移除旧数据库连接配置]"
+# # 
+# # logger.info("📋 数据库配置:")
+# # logger.info("   DATABASE_URL: %s", DATABASE_URL.replace('://', '://***:***@') if '@' in DATABASE_URL else DATABASE_URL)
+# # 
+# # engine = create_engine(
+# #     DATABASE_URL,
+# #     pool_size=10,
+# #     max_overflow=20,
+# #     pool_recycle=3600,
+# #     pool_pre_ping=True,
+# #     echo=False
+# # )
+# # 
+# # SessionLocal = scoped_session(sessionmaker(bind=engine, autocommit=False, autoflush=False))
+# # logger.info("✅ 数据库连接池初始化完成")
+# # 
+# # from sqlalchemy import create_engine, Column, String, Integer, JSON, func, text
+# # from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session
+# # from sqlalchemy.exc import SQLAlchemyError
+# # Base = declarative_base()
+# # class UserGift(Base):
+# #     __tablename__ = 'user_gift'
+# # 
+# #     wechat_id = Column(String(64), primary_key=True, comment='微信号')
+# #     remaining = Column(Integer, nullable=False, default=0, comment='剩余抽奖次数')
+# #     prizes = Column(JSON, nullable=True, comment='中奖记录，格式：[{"name":"奖品名","time":"YYYY-MM-DD HH:MM:SS"}]')
+# #     phone = Column(String(20), nullable=True, comment='用户手机号')
+# # 
+# #     def to_dict(self):
+# #         return {
+# #             'wechat_id': self.wechat_id,
+# #             'remaining': self.remaining,
+# #             'prizes': self.prizes if self.prizes else [],
+# #             'phone': self.phone
+# #         }
+# # 
+# # def get_user(wechat_id):
+# #     logger.debug("🔍 查询用户: wechat_id=%s", wechat_id)
+# #     session = SessionLocal()
+# #     try:
+# #         user = session.query(UserGift).filter_by(wechat_id=wechat_id).first()
+# #         if user:
+# #             logger.debug("✅ 用户存在: wechat_id=%s, remaining=%d", wechat_id, user.remaining)
+# #         else:
+# #             logger.debug("❌ 用户不存在: wechat_id=%s", wechat_id)
+# #         return user
+# #     finally:
+# #         SessionLocal.remove()
+# # 
+# # def add_attempts(wechat_id, num):
+# #     logger.info("📝 增加抽奖次数: wechat_id=%s, num=%d", wechat_id, num)
+# #     session = SessionLocal()
+# #     try:
+# #         sql = text("""
+# #             INSERT INTO user_gift (wechat_id, remaining) 
+# #             VALUES (:wechat_id, :num) 
+# #             ON DUPLICATE KEY UPDATE remaining = remaining + :num
+# #         """)
+# #         session.execute(sql, {'wechat_id': wechat_id, 'num': num})
+# #         session.commit()
+# #         user = get_user(wechat_id)
+# #         new_remaining = user.remaining if user else 0
+# #         logger.info("✅ 增加成功: wechat_id=%s, new_remaining=%d", wechat_id, new_remaining)
+# #         return new_remaining
+# #     except SQLAlchemyError as e:
+# #         session.rollback()
+# #         logger.error("❌ add_attempts 失败: wechat_id=%s, error=%s", wechat_id, e)
+# #         raise RuntimeError(f"增加次数失败: {e}")
+# #     finally:
+# #         SessionLocal.remove()
+# # 
+# # def deduct_attempts(wechat_id, num):
+# #     logger.info("📝 扣减抽奖次数: wechat_id=%s, num=%d", wechat_id, num)
+# #     session = SessionLocal()
+# #     try:
+# #         result = session.query(UserGift).filter(
+# #             UserGift.wechat_id == wechat_id,
+# #             UserGift.remaining >= num
+# #         ).update(
+# #             {UserGift.remaining: UserGift.remaining - num},
+# #             synchronize_session=False
+# #         )
+# #         session.commit()
+# #         if result == 0:
+# #             logger.warning("⚠️ 扣减失败: wechat_id=%s, 次数不足或用户不存在", wechat_id)
+# #             return False, None
+# #         user = get_user(wechat_id)
+# #         new_remaining = user.remaining if user else 0
+# #         logger.info("✅ 扣减成功: wechat_id=%s, new_remaining=%d", wechat_id, new_remaining)
+# #         return True, new_remaining
+# #     except SQLAlchemyError as e:
+# #         session.rollback()
+# #         logger.error("❌ deduct_attempts 失败: wechat_id=%s, error=%s", wechat_id, e)
+# #         raise RuntimeError(f"减少次数失败: {e}")
+# #     finally:
+# #         SessionLocal.remove()
+# # 
+# # def win_prize(wechat_id, prize_name, phone=None):
+# #     """
+# #     保存中奖奖品和手机号。
+# # 
+# #     抽奖次数已在 /deduct_attempts 接口中提前扣减，
+# #     此处绝不重复扣减。
+# #     """
+# #     logger.info(
+# #         "🎉 保存中奖记录: wechat_id=%s, prize_name=%s, phone=%s",
+# #         wechat_id,
+# #         prize_name,
+# #         phone
+# #     )
+# # 
+# #     session = SessionLocal()
+# # 
+# #     try:
+# #         new_prizes = func.json_array_append(
+# #             func.ifnull(UserGift.prizes, func.json_array()),
+# #             '$',
+# #             func.json_object(
+# #                 'name',
+# #                 prize_name,
+# #                 'time',
+# #                 func.now()
+# #             )
+# #         )
+# # 
+# #         update_dict = {
+# #             UserGift.prizes: new_prizes
+# #         }
+# # 
+# #         if phone is not None:
+# #             update_dict[UserGift.phone] = phone
+# # 
+# #         # 只要求用户存在；不检查次数，也不扣减次数。
+# #         result = session.query(UserGift).filter(
+# #             UserGift.wechat_id == wechat_id
+# #         ).update(
+# #             update_dict,
+# #             synchronize_session=False
+# #         )
+# # 
+# #         session.commit()
+# # 
+# #         if result == 0:
+# #             logger.warning(
+# #                 "⚠️ 保存中奖记录失败，用户不存在: wechat_id=%s",
+# #                 wechat_id
+# #             )
+# #             return False, "用户不存在"
+# # 
+# #         user = get_user(wechat_id)
+# #         remaining = user.remaining if user else 0
+# # 
+# #         logger.info(
+# #             "✅ 中奖记录保存成功: wechat_id=%s, prize_name=%s, "
+# #             "remaining=%d",
+# #             wechat_id,
+# #             prize_name,
+# #             remaining
+# #         )
+# # 
+# #         return True, remaining
+# # 
+# #     except SQLAlchemyError as e:
+# #         session.rollback()
+# # 
+# #         logger.error(
+# #             "❌ 保存中奖记录失败: wechat_id=%s, error=%s",
+# #             wechat_id,
+# #             e
+# #         )
+# # 
+# #         raise RuntimeError(f"保存中奖记录失败: {e}")
+# # 
+# #     finally:
+# #         SessionLocal.remove()
+# # 
+# # Base.metadata.create_all(engine)
+
+# 二期数据库逻辑
+# -- 抽奖已停用：保留表结构说明，不创建新表、不删除已有表或数据。
+# -- CREATE TABLE IF NOT EXISTS chances(project_id TEXT PRIMARY KEY, used_by TEXT UNIQUE);
+# -- CREATE TABLE IF NOT EXISTS draws(id TEXT PRIMARY KEY, project_id TEXT NOT NULL UNIQUE,
+# --     result TEXT NOT NULL, created REAL NOT NULL);
+# # 抽奖已停用：作品完成不再发放机会，保留原数据库写入逻辑。
+# # db.execute('INSERT OR IGNORE INTO chances(project_id) VALUES (?)', (project_id,))
+    # 抽奖数据库查询与写入逻辑仅作保留，全部注释，不注册、不调用。
+
+    # def benefits(self):
+    #     with self.connection() as db:
+    #         return {'remaining': db.execute('SELECT COUNT(*) FROM chances WHERE used_by IS NULL').fetchone()[0],
+    #                 'draws': [dict(row) for row in db.execute('SELECT * FROM draws ORDER BY created DESC')]}
+    #
+    # def draw(self, key, enabled=False):
+    #     # No prizes/probabilities have been provided: do not consume a real chance.
+    #     with self.transaction() as db:
+    #         old = db.execute('SELECT * FROM draws WHERE id=?', (key,)).fetchone()
+    #         if old:
+    #             return dict(old)
+    #         if not enabled:
+    #             raise ValueError('奖品尚未配置，抽奖机会会保留')
+    #         row = db.execute('SELECT project_id FROM chances WHERE used_by IS NULL LIMIT 1').fetchone()
+    #         if not row:
+    #             raise ValueError('暂无可用抽奖机会')
+    #         result = {'id': key, 'project_id': row[0], 'result': '开发演示结果，不发放真实奖品', 'created': time.time()}
+    #         db.execute('INSERT INTO draws VALUES (?,?,?,?)', tuple(result.values()))
+    #         db.execute('UPDATE chances SET used_by=? WHERE project_id=?', (key, row[0]))
+    #         return result
+
+
+server/init/v006_gift.sql
+-- 抽奖已停用；结构保留，全部注释，不删除已有数据库表。
+-- -- ==========================================
+-- -- AITravel Gift Service
+-- -- gift_users.sql
+-- -- 用户奖品表（单表设计）
+-- -- ==========================================
+--
+-- USE aitravel;
+--
+-- CREATE TABLE IF NOT EXISTS user_gift (
+--
+--     wechat_id VARCHAR(64) NOT NULL
+--     COMMENT '微信号/OpenID，主键',
+--
+--     remaining INT NOT NULL DEFAULT 0
+--     COMMENT '剩余抽奖次数（非负）',
+--
+--     prizes JSON DEFAULT NULL
+--     COMMENT '中奖记录，JSON数组，每个元素包含 name 和 time，如 [{"name":"10元红包","time":"2026-08-08 10:00:00"}]',
+--
+--     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+--     COMMENT '记录首次创建时间',
+--
+--     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+--     COMMENT '记录最后更新时间',
+--
+--     PRIMARY KEY (wechat_id)
+--
+-- ) ENGINE=InnoDB
+-- DEFAULT CHARACTER SET=utf8mb4
+-- DEFAULT COLLATE=utf8mb4_unicode_ci
+-- COMMENT='用户奖品表';

@@ -1,0 +1,40 @@
+{
+  "setting": {
+    "es6": true,
+    "postcss": true,
+    "minified": true,
+    "uglifyFileName": false,
+    "enhance": true,
+    "packNpmRelationList": [],
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    },
+    "useCompilerPlugins": false,
+    "minifyWXML": true,
+    "minifyWXSS": true,
+    "compileWorklet": false,
+    "uploadWithSourceMap": true,
+    "packNpmManually": false,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "condition": false
+  },
+  "compileType": "miniprogram",
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [
+      {
+        "value": "assets",
+        "type": "folder"
+      }
+    ],
+    "include": []
+  },
+  "appid": "wx38f0f125309bc236",
+  "editorSetting": {},
+  "projectname": "贺见旅拍",
+  "libVersion": "3.13.0",
+  "isGameTourist": false
+}

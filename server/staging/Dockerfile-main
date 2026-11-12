@@ -1,0 +1,15 @@
+FROM python:3.11-slim
+WORKDIR /app
+ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
+COPY server/phase2/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -i ${PIP_INDEX_URL} -r /tmp/requirements.txt
+ARG BUILD_REVISION=unknown
+ARG BUILD_TIME=unknown
+LABEL org.opencontainers.image.revision="${BUILD_REVISION}" \
+      org.opencontainers.image.created="${BUILD_TIME}" \
+      org.opencontainers.image.title="hejian-lvpai-main"
+COPY server/common /app/server/common
+COPY server/phase2 /app/server/phase2
+COPY server/logcollector /app/server/logcollector
+ENV PYTHONUNBUFFERED=1 PYTHONPATH=/app/server
+CMD ["python","/app/server/phase2/phase2_app.py"]

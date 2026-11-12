@@ -1,0 +1,232 @@
+services:
+  personattr:
+    build:
+      context: ../..
+      dockerfile: server/staging/Dockerfile-ai
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-staging}
+      TZ: Asia/Shanghai
+      BUILD_REVISION: ${BUILD_REVISION:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-unknown}
+      PORT: 10002
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET}
+      LOCAL_CLOUD_ENABLED: ${LOCAL_CLOUD_ENABLED:-false}
+      PHASE2_LOG_SERVICE: personattr
+      LOG_COLLECTOR_URL: http://${MAIN_PRIVATE_IP:-10.0.0.12}:18031/api/v1/logs/ingest
+      ALIBABA_CLOUD_ACCESS_KEY_ID: ${ALIBABA_CLOUD_ACCESS_KEY_ID}
+      ALIBABA_CLOUD_ACCESS_KEY_SECRET: ${ALIBABA_CLOUD_ACCESS_KEY_SECRET}
+      ALIBABA_CLOUD_SECURITY_TOKEN: ${ALIBABA_CLOUD_SECURITY_TOKEN}
+      ALIYUN_FACE_ENDPOINT: ${ALIYUN_FACE_ENDPOINT}
+      ALIYUN_FACE_REGION: ${ALIYUN_FACE_REGION}
+      EXTERNAL_DOMAIN: ${PUBLIC_BASE_URL}
+      PHASE2_AUTH_MODE: wechat
+      SERVICE_THREADS: ${PERSONATTR_SERVICE_THREADS:-64}
+    ports:
+    - ${AI_PRIVATE_IP:-10.0.0.13}:18002:10002
+    volumes:
+    - /opt/hejian-lvpai/node-logs/ai:/var/lib/hejian-lvpai/service-logs
+    command:
+    - python
+    - /app/server/personattr/personattr_app.py
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    stop_grace_period: 60s
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:10002/api/v1/personattr/health')
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+  seedream:
+    build:
+      context: ../..
+      dockerfile: server/staging/Dockerfile-ai
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-staging}
+      TZ: Asia/Shanghai
+      BUILD_REVISION: ${BUILD_REVISION:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-unknown}
+      PHASE2_DURABLE_TASKS: 'true'
+      PHASE2_TASK_DB_POOL_SIZE: ${SEEDREAM_TASK_DB_POOL_SIZE:-80}
+      PHASE2_TASK_DB_MAX_OVERFLOW: ${SEEDREAM_TASK_DB_MAX_OVERFLOW:-20}
+      PHASE2_TASK_LEASE_SECONDS: ${PHASE2_TASK_LEASE_SECONDS:-3600}
+      PHASE2_TASK_MAX_SECONDS: ${PHASE2_TASK_MAX_SECONDS:-7200}
+      PHASE2_AUTH_MODE: wechat
+      PORT: 10008
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET}
+      LOCAL_CLOUD_ENABLED: ${LOCAL_CLOUD_ENABLED:-false}
+      PHASE2_LOG_SERVICE: seedream
+      LOG_COLLECTOR_URL: http://${MAIN_PRIVATE_IP:-10.0.0.12}:18031/api/v1/logs/ingest
+      SEEDREAM_API_KEY: ${SEEDREAM_API_KEY}
+      SEEDREAM_MODEL: ${SEEDREAM_MODEL}
+      SEEDREAM_MIN_SIZE: 1K
+      FILE_SERVICE_URL: http://${DATA_PRIVATE_IP:-10.0.0.11}:18004
+      EXTERNAL_DOMAIN: ${PUBLIC_BASE_URL}
+      AITRAVEL_DATABASE_URL: ${AITRAVEL_DATABASE_URL:?Fill dedicated test database
+        URL}
+      SERVICE_THREADS: ${SEEDREAM_SERVICE_THREADS:-500}
+      CHANNEL_TIMEOUT: ${SEEDREAM_CHANNEL_TIMEOUT:-300}
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL}
+      TOS_SERVICE_URL: http://${DATA_PRIVATE_IP:-10.0.0.11}:18012
+    command:
+    - python
+    - /app/server/ai2pic/seedream_app.py
+    volumes:
+    - /opt/hejian-lvpai/node-logs/ai:/var/lib/hejian-lvpai/service-logs
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    stop_grace_period: 60s
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:10008/api/v1/images/health')
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+  charactergen:
+    build:
+      context: ../..
+      dockerfile: server/staging/Dockerfile-ai
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-staging}
+      TZ: Asia/Shanghai
+      BUILD_REVISION: ${BUILD_REVISION:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-unknown}
+      PHASE2_DURABLE_TASKS: 'true'
+      PHASE2_TASK_DB_POOL_SIZE: ${CHARACTER_TASK_DB_POOL_SIZE:-80}
+      PHASE2_TASK_DB_MAX_OVERFLOW: ${CHARACTER_TASK_DB_MAX_OVERFLOW:-20}
+      PHASE2_TASK_LEASE_SECONDS: ${PHASE2_TASK_LEASE_SECONDS:-3600}
+      PHASE2_TASK_MAX_SECONDS: ${PHASE2_TASK_MAX_SECONDS:-7200}
+      PORT: 10005
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET}
+      PHASE2_TEMPLATE_API_URL: http://${MAIN_PRIVATE_IP:-10.0.0.12}:18020/api/v2/templates
+      IMAGE_SERVICE_URL: http://seedream:10008
+      TOS_SERVICE_URL: http://${DATA_PRIVATE_IP:-10.0.0.11}:18012
+      EXTERNAL_DOMAIN: ${PUBLIC_BASE_URL}
+      PHASE2_AUTH_MODE: wechat
+      LOCAL_CLOUD_ENABLED: ${LOCAL_CLOUD_ENABLED:-false}
+      AITRAVEL_DATABASE_URL: ${AITRAVEL_DATABASE_URL:?Fill dedicated test database
+        URL}
+      PHASE2_LOG_SERVICE: charactergen
+      LOG_COLLECTOR_URL: http://${MAIN_PRIVATE_IP:-10.0.0.12}:18031/api/v1/logs/ingest
+      PHASE2_GENERATION_WORKERS: ${CHARACTER_GENERATION_WORKERS:-500}
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL}
+    ports:
+    - ${AI_PRIVATE_IP:-10.0.0.13}:18005:10005
+    volumes:
+    - /opt/hejian-lvpai/node-logs/ai:/var/lib/hejian-lvpai/service-logs
+    command:
+    - python
+    - /app/server/charactergen/charactergen_app.py
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    stop_grace_period: 60s
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:10005/api/v1/image/health')
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    depends_on:
+      seedream:
+        condition: service_healthy
+  video:
+    build:
+      context: ../..
+      dockerfile: server/staging/Dockerfile-ai
+      args:
+        BUILD_REVISION: ${BUILD_REVISION:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-staging}
+      TZ: Asia/Shanghai
+      BUILD_REVISION: ${BUILD_REVISION:-unknown}
+      BUILD_TIME: ${BUILD_TIME:-unknown}
+      PHASE2_DURABLE_TASKS: 'true'
+      PHASE2_TASK_DB_POOL_SIZE: ${VIDEO_TASK_DB_POOL_SIZE:-60}
+      PHASE2_TASK_DB_MAX_OVERFLOW: ${VIDEO_TASK_DB_MAX_OVERFLOW:-20}
+      PHASE2_TASK_LEASE_SECONDS: ${PHASE2_TASK_LEASE_SECONDS:-3600}
+      PHASE2_TASK_MAX_SECONDS: ${PHASE2_TASK_MAX_SECONDS:-7200}
+      PORT: 10006
+      AITRAVEL_JWT_SECRET: ${AITRAVEL_JWT_SECRET}
+      SEEDANCE_API_KEY: ${SEEDANCE_API_KEY}
+      SEEDANCE_MODEL: ${SEEDANCE_MODEL:-doubao-seedance-2-0-fast-260128}
+      SEEDANCE_ASSET_ACCESS_KEY_ID: ${SEEDANCE_ASSET_ACCESS_KEY_ID}
+      SEEDANCE_ASSET_ACCESS_KEY_SECRET: ${SEEDANCE_ASSET_ACCESS_KEY_SECRET}
+      SEEDANCE_ASSET_GROUP_ID: ${SEEDANCE_ASSET_GROUP_ID}
+      SEEDANCE_ASSET_PROJECT_NAME: ${SEEDANCE_ASSET_PROJECT_NAME}
+      TOS_SERVICE_URL: http://${DATA_PRIVATE_IP:-10.0.0.11}:18012
+      LOCAL_RESULT_ROOT: /var/lib/hejian-lvpai/results
+      EXTERNAL_DOMAIN: ${PUBLIC_BASE_URL}
+      PHASE2_AUTH_MODE: wechat
+      LOCAL_CLOUD_ENABLED: ${LOCAL_CLOUD_ENABLED:-false}
+      AITRAVEL_DATABASE_URL: ${AITRAVEL_DATABASE_URL:?Fill dedicated test database
+        URL}
+      PHASE2_LOG_SERVICE: video
+      LOG_COLLECTOR_URL: http://${MAIN_PRIVATE_IP:-10.0.0.12}:18031/api/v1/logs/ingest
+      PHASE2_GENERATION_WORKERS: ${VIDEO_GENERATION_WORKERS:-40}
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL}
+      PHASE2_TEMPLATE_API_URL: http://${MAIN_PRIVATE_IP:-10.0.0.12}:18020/api/v2/templates
+      PHASE2_VIDEO_MAX_INFLIGHT: ${PHASE2_VIDEO_MAX_INFLIGHT:-40}
+      SERVICE_THREADS: ${VIDEO_SERVICE_THREADS:-64}
+      LOCAL_RESULT_STORAGE: tos
+    ports:
+    - ${AI_PRIVATE_IP:-10.0.0.13}:18006:10006
+    volumes:
+    - phase2_results:/var/lib/hejian-lvpai/results
+    - /opt/hejian-lvpai/node-logs/ai:/var/lib/hejian-lvpai/service-logs
+    command:
+    - python
+    - /app/server/aitask/seeddance_video_app.py
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    stop_grace_period: 60s
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:10006/api/v1/health')
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+volumes:
+  phase2_results: null
+name: ${COMPOSE_PROJECT_NAME:-hejian-lvpai-test-ai}
